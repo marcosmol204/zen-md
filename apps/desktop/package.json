@@ -1,0 +1,17 @@
+{
+  "name": "@md-reader/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "start": "node start.mjs",
+    "check": "cargo check --locked --manifest-path src-tauri/Cargo.toml"
+  },
+  "dependencies": {
+    "@md-reader/web": "*"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

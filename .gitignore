@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.claude
+.scratch
+test-results/
+playwright-report/
+
+# Private workflow (kept on disk, not published)
+AGENTS.md
+docs/agents/
+docs/plans/
+docs/qa-sheet.md
+docs/research.md
+skills-lock.json
+test.png
+.turbo

@@ -1,0 +1,24 @@
+{
+  "name": "md-reader",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --filter=@md-reader/web",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "check": "turbo run check",
+    "test:e2e": "turbo run test:e2e",
+    "tauri": "npm run tauri -w @md-reader/desktop --",
+    "start": "npm run start -w @md-reader/desktop",
+    "check-types": "turbo run check-types"
+  },
+  "devDependencies": {
+    "@rolldown/binding-darwin-arm64": "1.2.12",
+    "turbo": "^2.11.7"
+  }
+}

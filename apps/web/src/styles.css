@@ -1,0 +1,173 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Dark = a .dark class on <html>, set by theme.ts (and by index.html before first paint) from System/Light/Dark. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Theme (picked with ui-ux-pro-max: "Minimalism & Swiss", neutral, OS-agnostic):
+   - shadcn "neutral" greys; ONE accent (--brand, blue) for the selected row, links and the focus ring.
+   - Type: system-ui (SF / Segoe UI). UI 13px, sidebar rows 13px/28px, captions 12px; editor 16px/1.65.
+   - Spacing: 4px grid (Tailwind 1 = 4px); sidebar padding 8px, row indent 12px per level.
+   - Banner: full-width strip under the window top, tinted background + icon + small outline buttons. */
+:root {
+  color-scheme: light;
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: var(--brand);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  --brand: oklch(0.55 0.19 258);
+  --warn: oklch(0.97 0.07 95);
+  --warn-border: oklch(0.8 0.14 85);
+}
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: var(--brand);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+  --brand: oklch(0.72 0.14 250);
+  --warn: oklch(0.3 0.06 85);
+  --warn-border: oklch(0.55 0.12 80);
+}
+
+@theme inline {
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-brand: var(--brand);
+  --color-warn: var(--warn);
+  --color-warn-border: var(--warn-border);
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  html, body, #root { height: 100%; }
+  body { @apply bg-background text-foreground font-sans text-sm antialiased; }
+}
+
+/* CodeMirror, KaTeX and Mermaid render their own DOM: plain CSS, not utilities.
+   codemirror-live-markdown reads shadcn-v3 HSL triplets (`hsl(var(--primary))`), so the editor subtree gets
+   triplet copies of the tokens above; oklch values there would make its rules invalid. */
+.cm-editor {
+  --background: 0 0% 100%; --foreground: 0 0% 9%; --muted: 0 0% 96%; --muted-foreground: 0 0% 45%;
+  --border: 0 0% 90%; --primary: 217 91% 50%; --md-link: var(--primary);
+  --md-heading: 0 0% 9%; --code-bg: 0 0% 96%;
+}
+.dark .cm-editor {
+  --background: 0 0% 4%; --foreground: 0 0% 98%; --muted: 0 0% 15%; --muted-foreground: 0 0% 64%;
+  --border: 0 0% 20%; --primary: 213 94% 68%; --md-heading: 0 0% 98%; --code-bg: 0 0% 13%;
+}
+/* codemirror-live-markdown hardcodes GitHub-light highlight.js colours; these are their GitHub-dark counterparts. */
+.dark .cm-editor :is(.hljs-keyword, .hljs-operator) { color: #ff7b72; }
+.dark .cm-editor .hljs-string { color: #a5d6ff; }
+.dark .cm-editor :is(.hljs-number, .hljs-built_in, .hljs-literal, .hljs-attr, .hljs-selector-id, .hljs-attribute, .hljs-meta) { color: #79c0ff; }
+.dark .cm-editor :is(.hljs-function, .hljs-title, .hljs-selector-class) { color: #d2a8ff; }
+.dark .cm-editor .hljs-comment { color: #8b949e; }
+.dark .cm-editor :is(.hljs-class, .hljs-selector-tag, .hljs-name) { color: #7ee787; }
+.dark .cm-editor .hljs-variable { color: #ffa657; }
+.dark .cm-editor :is(.hljs-punctuation, .hljs-params) { color: #c9d1d9; }
+.cm-editor { height: 100%; background: hsl(var(--background)); color: hsl(var(--foreground)); }
+.cm-editor.cm-focused { outline: none; }
+.cm-editor .cm-scroller { padding: 24px 0; }
+.cm-editor .cm-scroller { container-type: inline-size; }
+/* Paper sits left, next to the sidebar; the gutter grows with the editor pane (not the window: the sidebar resizes). */
+.cm-editor .cm-content { max-width: 760px; padding: 0 32px 0 clamp(32px, 6cqi, 96px); font-size: 16px; line-height: 1.65; }
+.cm-editor .cm-cursor { border-left-color: hsl(var(--foreground)); }
+.md-task { margin: 0 6px 0 0; vertical-align: middle; cursor: pointer; }
+.md-mermaid { display: flex; justify-content: center; padding: 12px 0; color: hsl(var(--muted-foreground)); }
+.md-mermaid svg { max-width: 100%; height: auto; }
+.md-mermaid-error { color: var(--destructive); font-family: ui-monospace, monospace; font-size: 13px; }
+
+/* Editor typography on top of codemirror-live-markdown's defaults. */
+.cm-editor .cm-content { font-family: var(--font-sans); color: hsl(var(--foreground)); }
+/* Source view mode: the raw markdown, same reading column, monospace. */
+.cm-editor .cm-content.md-source { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+.cm-editor .cm-header-1 { font-size: 1.875em; font-weight: 700; letter-spacing: -0.02em; }
+.cm-editor .cm-header-2 { font-size: 1.5em; font-weight: 650; letter-spacing: -0.01em; }
+.cm-editor .cm-header-3 { font-size: 1.25em; font-weight: 600; }
+.cm-editor .cm-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.875em;
+  background: hsl(var(--code-bg)); border-radius: 4px; padding: 0.1em 0.3em;
+}
+.cm-editor .cm-codeblock-widget pre, .cm-editor .cm-codeblock-line { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+.cm-editor .cm-table-widget table { border-radius: 6px; font-size: 15px; }
+.cm-editor .md-quote { border-left: 3px solid hsl(var(--border)); padding-left: 14px !important; color: hsl(var(--muted-foreground)); }
+.md-task { accent-color: var(--brand); width: 15px; height: 15px; }
+
+/* Folder-loading overlay: invisible (yet blocking) for 200ms, then fades in. */
+.loading-overlay { animation: loading-in 150ms ease-out 200ms both; }
+@keyframes loading-in { from { opacity: 0; } }

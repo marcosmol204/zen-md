@@ -29,11 +29,4 @@ test-results/
 playwright-report/
 
 # Private workflow (kept on disk, not published)
-AGENTS.md
-docs/agents/
-docs/plans/
-docs/qa-sheet.md
-docs/research.md
-skills-lock.json
-test.png
 .turbo

@@ -1,47 +1,98 @@
-# md-reader
+# zen-md
 
-Minimal Markdown editor for folders AI agents write into. Typora-like live preview, live reload without cursor jumps, and a banner instead of clobbering your unsaved edits.
+A calm Markdown workspace built for developers who collaborate with AI agents.
 
-macOS is the primary platform. Windows and Linux are unsupported (CI checks they compile) — [contributions welcome](CONTRIBUTING.md).
+Typora-style inline preview, rock-solid file watching without cursor jumps, and conflict protection so agents never clobber your edits.
 
-## Prerequisites
+---
 
-- [Node](https://nodejs.org) 22+ (or ≥ 20.19)
-- [Rust](https://rustup.rs) ≥ 1.77.2 (after installing, ensure Cargo is in your `$PATH`: run `source "$HOME/.cargo/env"` or restart your terminal)
-- Your platform's Tauri dependencies — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) (on macOS: `xcode-select --install`)
+## Why zen-md
 
-Not sure what's missing? `npx tauri info` reports it.
+Chatting with an AI agent inside an IDE always felt unnatural to me.
 
-> [!TIP]
-> If Vite fails during build with `Cannot find native binding` (an npm optional dependencies issue), install the platform binding directly:  
-> `npm i -D @rolldown/binding-darwin-arm64` (on macOS Apple Silicon) or your platform's equivalent.
+IDEs are built for writing syntax, compiling code, and debugging breakpoints. But collaborating with an agent on architecture, specifications, and task plans is a reading and thinking activity.
 
-## Run
+In an IDE, you usually get stuck in a cramped sidebar chat box or a split pane with raw markdown on one side and a laggy web preview on the other. Worse, when an agent like Claude Code or Codex streams a new plan into a file, the editor flickers, the scroll position jumps, and if you happen to tweak a sentence while the agent is running, the IDE frequently overwrites your work.
+
+Other tools went in the opposite direction, packing in MCP integrations, chat panels, prompt managers, and complex agent orchestrators. I didn't want another heavyweight suite. I just wanted to edit Markdown files.
+
+I wanted a separate, quiet window.
+
+zen-md opens any folder of markdown files on your machine. You let your agent write, stream, and update files in the background. zen-md displays the formatted result instantly, keeps your view stable, and preserves every word you write.
+
+## What it does
+
+### Live inline preview
+Headings, code blocks with syntax highlighting, tables, math with KaTeX, and Mermaid diagrams render directly in place. Markdown syntax stays hidden until your cursor enters that specific line.
+
+### Stable streaming without cursor jumps
+When an agent streams 500 lines of text into your active file, zen-md updates the content quietly without redrawing the whole buffer. Your cursor stays where you left it. If your view is scrolled to the bottom, zen-md follows the incoming text smoothly.
+
+### Conflict protection
+If you edit an open file while an agent writes to that same file on disk, zen-md never overwrites your buffer. A banner appears offering three straightforward choices: reload from disk, save your edits as a copy, or keep your version.
+
+### Pure local files
+Your local files remain the single source of truth. zen-md saves exact bytes and preserves your line endings (LF/CRLF) so git diffs stay clean.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org) 20.19+ or 22+
+- [Rust](https://rustup.rs) 1.77.2+ (ensure `cargo` is in your `$PATH`)
+- macOS: Xcode Command Line Tools (`xcode-select --install`)
+
+If you are missing any build dependencies, run `npx tauri info` to inspect your environment.
+
+### Run
 
 ```sh
-git clone <repo-url> md-reader
-cd md-reader
+git clone <repo-url> zen-md
+cd zen-md
 npm install
 npm start
 ```
 
-`npm start` makes a production build and launches it from the repo. Nothing is installed on your system; the first build takes a few minutes, later ones about a minute.
+`npm start` builds a release binary and opens it. Nothing is installed globally.
+On macOS, the built application is located at `apps/desktop/src-tauri/target/release/bundle/macos/zen-md.app`.
 
-- macOS: the app is at `apps/desktop/src-tauri/target/release/bundle/macos/md-reader.app` — drag it to Applications if you like.
-- Windows/Linux: the binary is in `apps/desktop/src-tauri/target/release/`.
-
-**Update:** `git pull && npm install && npm start`.
-
-## Develop
+### Development
 
 ```sh
-npm run tauri dev   # dev app with hot reload
-npm test            # unit tests
+npm run tauri dev   # start frontend and Tauri dev window with hot reload
+npm test            # run test suite
 ```
 
-Simulate an agent writing files: `node scripts/fake-agent.mjs <folder> [stream|rewrite|atomic|files|delete|all]`
+You can simulate an agent writing files using the included script:
+```sh
+node scripts/fake-agent.mjs <folder-path> stream
+```
 
-Docs: [design](docs/design.md) · [ADRs](docs/adr/)
+---
+
+## Shortcuts
+
+| Action | Shortcut |
+|---|---|
+| Toggle Formatted / Source view | `⌘E` |
+| Save file | `⌘S` |
+| Open folder | `⌘O` |
+
+---
+
+## Roadmap & Philosophy
+
+The core of zen-md will always stay focused on this single job: reading and editing local Markdown files without distraction.
+
+We will keep the base editor intentionally lean. No built-in MCP servers, no agent runtimes, and no feature bloat. If you need capabilities beyond reading and editing Markdown, those will be supported through a future plugin mechanism so the core app remains lightweight and quiet.
+
+---
+
+## Platform Support
+
+zen-md is built primarily for macOS. Windows and Linux builds compile in CI, but are currently community-supported.
 
 ## License
 

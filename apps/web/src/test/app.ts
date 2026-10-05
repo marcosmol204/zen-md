@@ -11,6 +11,9 @@ import type { Settings } from "@/platform/fsx";
 import { THEME_KEY } from "@/platform/theme";
 import { isMac } from "../lib/utils";
 
+const nativeWindowAdd = window.addEventListener;
+const nativeDocAdd = document.addEventListener;
+
 const extra: string[] = [];
 
 /** Another folder on disk, for recents across folders; removed with the next app's dispose(). */
@@ -39,7 +42,7 @@ type Options = {
   openFolder?: boolean;
 };
 
-export async function boot({ files = {}, lastFile, settings, failWatch = false, osDark = false, storedTheme, openFolder: shouldOpen = !settings }: Options = {}) {
+export async function boot({ files = {}, lastFile, settings, failWatch = false, osDark = false, storedTheme, openFolder }: Options = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "mdr-")));
   const at = (rel: string) => join(root, rel);
   const write = async (rel: string, text: string) => {
@@ -52,15 +55,18 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
   stub.ctl.failWatch = failWatch;
   stub.settings = typeof settings === "function" ? settings(root) : settings ?? { lastFolder: root, lastFile: lastFile && at(lastFile) };
 
+  vi.restoreAllMocks();
+
   // The app and CodeMirror register window/document listeners; record them so dispose() can drop them.
   const added: [EventTarget, string, EventListenerOrEventListenerObject][] = [];
-  for (const target of [window, document]) {
-    const orig = target.addEventListener.bind(target);
-    vi.spyOn(target, "addEventListener").mockImplementation((type, fn, o) => {
-      added.push([target, type, fn!]);
-      orig(type, fn, o);
-    });
-  }
+  window.addEventListener = function (type: any, fn: any, o: any) {
+    added.push([window, type, fn]);
+    return nativeWindowAdd.call(this, type, fn, o);
+  };
+  document.addEventListener = function (type: any, fn: any, o: any) {
+    added.push([document, type, fn]);
+    return nativeDocAdd.call(this, type, fn, o);
+  };
 
   // OS appearance: a scriptable prefers-color-scheme query.
   const os = { dark: osDark, listeners: new Set<(e: { matches: boolean }) => void>() };
@@ -88,16 +94,36 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
   reactRoot.render(createElement(App));
   await vi.waitFor(() => { if (!stub.titles.length) throw new Error("app did not boot"); });
 
+  const shouldOpen = openFolder ?? (
+    settings
+      ? (typeof settings === "function" ? settings(root) : settings).lastFolder === root
+      : true
+  );
+
+  const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector<T>(sel);
+  const view = () => EditorView.findFromDOM($(".cm-editor")!)!;
+  const row = (rel: string) => $(`#tree .row[data-path="${CSS.escape(at(rel))}"]`);
+
   // Open the folder if requested (default: when no custom settings provided).
   if (shouldOpen) {
     stub.answers.pickFolder.push(root);
     const openBtn = document.querySelector<HTMLButtonElement>("[data-start] button")!;
     openBtn.click();
-    await vi.waitFor(() => { if (!document.querySelector("#tree .row")) throw new Error("folder did not open"); });
+    await vi.waitFor(() => {
+      if (Object.keys(files).length > 0) {
+        if (!document.querySelector("#tree .row")) throw new Error("folder did not open");
+      } else {
+        if (stub.answers.pickFolder.length > 0) throw new Error("folder did not open");
+      }
+    });
+    if (lastFile) {
+      row(lastFile)!.click();
+      await vi.waitFor(() => { if (!document.querySelector(".cm-editor")) throw new Error("file did not open"); });
+    }
   }
 
   // FSEvents starts asynchronously: prove the watcher sees writes before the test makes any.
-  if (stub.events.length === 0 && !failWatch && !settings) {
+  if (shouldOpen && stub.events.length === 0 && !failWatch) {
     const probe = at(".watch-probe");
     await vi.waitFor(async () => {
       await writeFile(probe, String(Date.now()));
@@ -105,10 +131,6 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
     }, { timeout: 2000, interval: 20 });
     await rm(probe);
   }
-
-  const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector<T>(sel);
-  const view = () => EditorView.findFromDOM($(".cm-editor")!)!;
-  const row = (rel: string) => $(`#tree .row[data-path="${CSS.escape(at(rel))}"]`);
   let disposed = false;
 
   return {
@@ -204,9 +226,12 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
       seen.disconnect();
       // ponytail: fixed settle so App's 20ms watcher batch drains before teardown; expose a drain hook if it flakes.
       await new Promise((r) => setTimeout(r, 30));
-      view().destroy();
+      const cmEl = $(".cm-editor");
+      if (cmEl) EditorView.findFromDOM(cmEl)?.destroy();
       reactRoot.unmount();
       added.forEach(([t, type, fn]) => t.removeEventListener(type, fn));
+      window.addEventListener = nativeWindowAdd;
+      document.addEventListener = nativeDocAdd;
       vi.restoreAllMocks();
       await Promise.all([root, ...extra.splice(0)].map((d) => rm(d, { recursive: true, force: true })));
     },

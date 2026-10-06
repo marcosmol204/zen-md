@@ -1,12 +1,18 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { boot, tempFolder, until, type App } from "./app";
 import { THEME_KEY } from "@/platform/theme";
 
 let app: App;
-afterEach(() => app?.dispose());
+afterEach(async () => {
+  try {
+    await app?.dispose();
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
 
 describe("folder", () => {
   test("opening a folder lists its markdown files, hiding .git and node_modules", async () => {
@@ -147,16 +153,16 @@ describe("open document", () => {
     expect(await app.read("a.md")).toBe("﻿one\r\ntwo\r\nthree\r\n");
   });
 
-  test("startup restores the last folder and file", async () => {
+  test("booting opens the requested last file", async () => {
     app = await boot({ files: { "a.md": "alpha", "b.md": "beta" }, lastFile: "b.md" });
     expect(app.text()).toBe("beta");
     expect(app.row("b.md")!.classList).toContain("active");
   });
 
-  test("restoring the last file never flashes the welcome screen", async () => {
-    app = await boot({ files: { "a.md": "alpha" }, lastFile: "a.md" });
-    await until(() => expect(app.text()).toBe("alpha"));
-    expect(app.welcomeEverShown()).toBe(false);
+  test("launching the app opens to the welcome screen, not the last folder", async () => {
+    app = await boot({ files: { "a.md": "alpha" }, openFolder: false });
+    expect(app.welcome()!.heading).toBe("md-reader");
+    expect(app.rows()).toEqual([]);
   });
 
   test("startup comes up empty when the last folder is gone", async () => {

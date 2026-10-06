@@ -96,6 +96,7 @@ export function createApp(render: () => void) {
   }
 
   function remember() {
+    if (s.restoring) return;
     void fsx.saveSettings({
       lastFolder: s.root ?? undefined,
       lastFile: doc.path ?? undefined,

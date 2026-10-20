@@ -46,6 +46,17 @@ test("an agent rewrite shows up in the editor", async ({ page }) => {
   await expect(page.locator(".cm-content")).toContainText("v2 from agent");
 });
 
+test("right-click → Copy path and Copy relative path copy file paths", async ({ page }) => {
+  await open(page, "v1\n");
+  await page.locator('#tree .row[data-path="/w/a.md"]').click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Copy path" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__clipboard)).toBe("/w/a.md");
+
+  await page.locator('#tree .row[data-path="/w/a.md"]').click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Copy relative path" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__clipboard)).toBe("a.md");
+});
+
 test("right-click → Move to Trash confirms in an in-app dialog", async ({ page }) => {
   await open(page, "v1\n");
   await page.locator('#tree .row[data-path="/w/a.md"]').click({ button: "right" });

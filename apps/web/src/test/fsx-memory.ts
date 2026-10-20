@@ -53,5 +53,15 @@ export const onCloseRequested = (_guard: () => Promise<boolean>) => {};
 export const loadSettings = async () => ({ ...settings });
 export const saveSettings = async (s: Real.Settings) => { settings = { ...s }; };
 
+let clipboard = "";
+export const writeClipboard = async (text: string) => {
+  clipboard = text;
+  (window as any).__clipboard = text;
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text).catch(() => {});
+  }
+};
+export const getClipboard = () => clipboard;
+
 // Fails to compile if this stand-in drifts from the real fsx surface.
 export const _matchesReal = (f: typeof Self): typeof Real => f;

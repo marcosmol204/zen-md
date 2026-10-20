@@ -299,6 +299,24 @@ describe("file operations", () => {
     expect(await app.read("a.md")).toBe("x");
     expect(app.rows()).toEqual(["a.md"]);
   });
+
+  test("Copy path and Copy relative path copy file paths to clipboard", async () => {
+    app = await boot({ files: { "a.md": "top", "docs/nested.md": "inner" }, lastFile: "a.md" });
+    await app.contextMenu("a.md", "Copy path");
+    await until(() => expect(app.clipboard()).toBe(app.at("a.md")));
+
+    await app.contextMenu("a.md", "Copy relative path");
+    await until(() => expect(app.clipboard()).toBe("a.md"));
+
+    app.click("docs");
+    await until(() => expect(app.rows()).toEqual(["docs", "docs/nested.md", "a.md"]));
+
+    await app.contextMenu("docs/nested.md", "Copy path");
+    await until(() => expect(app.clipboard()).toBe(app.at("docs/nested.md")));
+
+    await app.contextMenu("docs/nested.md", "Copy relative path");
+    await until(() => expect(app.clipboard()).toBe("docs/nested.md"));
+  });
 });
 
 describe("unsaved changes", () => {

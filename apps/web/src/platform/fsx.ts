@@ -81,3 +81,26 @@ export async function saveSettings(s: Settings) {
   await mkdir(dir, { recursive: true });
   await writeText(joinPath(dir, "settings.json"), JSON.stringify(s));
 }
+
+export async function writeClipboard(text: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // ignore
+    }
+  }
+  try {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.position = "fixed";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    el.remove();
+  } catch {
+    // ignore
+  }
+}

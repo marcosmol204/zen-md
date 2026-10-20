@@ -8,6 +8,13 @@ export const joinPath = (dir: string, name: string) => `${dir}/${name}`;
 export const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
 export const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
+export function relativePath(path: string, root: string): string {
+  const prefix = root.endsWith("/") ? root : `${root}/`;
+  if (path.startsWith(prefix)) return path.slice(prefix.length);
+  if (path === root || path === root.replace(/\/$/, "")) return "";
+  return path;
+}
+
 export const isMd = (path: string) => /\.md$/i.test(path);
 
 // ponytail: .git stays hidden — its object dirs and constant churn would flood the walk/watcher (see 2fc510b).

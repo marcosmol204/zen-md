@@ -163,10 +163,25 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.875em;
   background: hsl(var(--code-bg)); border-radius: 4px; padding: 0.1em 0.3em;
 }
-.cm-editor .cm-codeblock-widget pre, .cm-editor .cm-codeblock-line { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+.cm-editor .md-code-line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px;
+  background: hsl(var(--code-bg)); padding: 0 14px !important;
+}
+.cm-editor .md-code-first { border-radius: 6px 6px 0 0; }
+.cm-editor .md-code-last { border-radius: 0 0 6px 6px; }
+.cm-editor .md-code-first.md-code-last { border-radius: 6px; }
 .cm-editor .cm-table-widget table { border-radius: 6px; font-size: 15px; }
+.cm-editor .md-table [contenteditable="true"] { outline: none; cursor: text; }
+.cm-editor .md-table [contenteditable="true"]:focus { box-shadow: inset 0 0 0 2px hsl(var(--primary) / 0.5); }
+.cm-editor .md-bullet { display: inline-block; white-space: pre; }
+.cm-editor .md-bullet-dot, .cm-editor .md-bullet-num { display: inline-block; min-width: 1.4em; color: hsl(var(--muted-foreground)); }
+.cm-editor .md-rule { display: inline-block; width: 100%; vertical-align: middle; border-top: 1px solid hsl(var(--border)); }
 .cm-editor .md-quote { border-left: 3px solid hsl(var(--border)); padding-left: 14px !important; color: hsl(var(--muted-foreground)); }
 .md-task { accent-color: var(--brand); width: 15px; height: 15px; }
+.cm-editor .cm-search-match { background: oklch(0.88 0.16 90 / 55%); border-radius: 2px; }
+.cm-editor .cm-search-match-selected { background: oklch(0.76 0.18 55 / 75%); box-shadow: 0 0 0 1px oklch(0.65 0.2 45); }
+.dark .cm-editor .cm-search-match { background: oklch(0.55 0.14 85 / 45%); }
+.dark .cm-editor .cm-search-match-selected { background: oklch(0.65 0.18 55 / 70%); box-shadow: 0 0 0 1px oklch(0.75 0.18 55); }
 
 /* Folder-loading overlay: invisible (yet blocking) for 200ms, then fades in. */
 .loading-overlay { animation: loading-in 150ms ease-out 200ms both; }

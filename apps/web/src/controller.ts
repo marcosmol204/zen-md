@@ -1,9 +1,11 @@
 import * as fsx from "@/platform/fsx";
 import type { EditorHandle, ViewMode } from "@/editor/editor";
 import { Doc, type EditorPort } from "@/core/doc";
+import { activeMatchIndex, findMatches, stepMatchIndex } from "@/core/search";
 import { isMac } from "@/lib/utils";
 import type { BannerActions } from "./components/Banner";
 import { ask } from "./components/ConfirmHost";
+import type { SearchActions, SearchViewState } from "./components/SearchBar";
 import type { MenuItem, Rename } from "./components/Sidebar";
 import * as recents from "@/core/recents";
 import { createTheme } from "@/platform/theme";
@@ -30,6 +32,14 @@ export function createApp(render: () => void) {
     recentFolders: [] as string[],
     recentFiles: [] as recents.RecentFile[],
     view: "formatted" as ViewMode,
+    search: {
+      open: false,
+      query: "",
+      caseSensitive: false,
+      matches: [],
+      activeIndex: -1,
+      focusSeq: 0,
+    } as SearchViewState,
     /** Saved sidebar width; shown clamped to the current window. */
     sidebarWidth: SIDEBAR_DEFAULT,
     /** True until startup has restored the last folder/file, so the welcome screen doesn't flash first. */
@@ -51,7 +61,15 @@ export function createApp(render: () => void) {
   // editor once a file is open, and switchTo waits for `editorReady` before opening one.
   let editor: EditorHandle | null = null;
   const editorReady = import("@/editor/editor").then(({ createEditor }) => {
-    editor = createEditor(editorEl, { onUserEdit: syncTitle });
+    editor = createEditor(editorEl, {
+      onUserEdit: syncTitle,
+      onDocChange: () => {
+        if (s.search.open) {
+          runSearch({ resetIndex: false, scroll: false });
+          render();
+        }
+      },
+    });
     editor.setReadOnly(true);
   });
   const port: EditorPort = {
@@ -133,12 +151,18 @@ export function createApp(render: () => void) {
     if (s.root) s.recentFiles = recents.touch(s.recentFiles, { path, root: s.root }, 8);
     editor!.setImageBase(fsx.assetUrl(parentOf(path)));
     setActive(path);
-    editor!.focus();
+    if (!s.search.open) editor!.focus();
     remember();
+  }
+
+  function resetSearch() {
+    s.search = { ...s.search, open: false, matches: [], activeIndex: -1 };
+    editor?.setSearchHighlights([], -1, false);
   }
 
   async function closeDoc() {
     if (!(await guardUnsaved())) return;
+    resetSearch();
     doc.close();
     setActive(null);
     remember();
@@ -149,6 +173,7 @@ export function createApp(render: () => void) {
     const me = ++opening;
     unwatch?.();
     unwatch = null;
+    resetSearch();
     if (doc.path) doc.close();
     s.root = dir;
     s.recentFolders = recents.touch(s.recentFolders, dir, 5);
@@ -306,7 +331,7 @@ export function createApp(render: () => void) {
       setStatus(`Couldn't move to Trash: ${e}`);
       return;
     }
-    if (affectsOpen) { doc.close(); setActive(null); }
+    if (affectsOpen) { resetSearch(); doc.close(); setActive(null); }
     s.recentFiles = recents.remove(s.recentFiles, node.path);
     await rescan([node.path]);
     remember();
@@ -343,13 +368,71 @@ export function createApp(render: () => void) {
     render();
   }
 
+  function runSearch(opts: { resetIndex: boolean; scroll: boolean }) {
+    if (!s.search.open || !doc.path || !editor || !s.search.query) {
+      s.search = { ...s.search, matches: [], activeIndex: -1 };
+      editor?.setSearchHighlights([], -1, false);
+      return;
+    }
+    const matches = findMatches(editor.getText(), s.search.query, { caseSensitive: s.search.caseSensitive });
+    let activeIndex = s.search.activeIndex;
+    if (matches.length === 0) activeIndex = -1;
+    else if (opts.resetIndex || activeIndex < 0 || activeIndex >= matches.length) {
+      activeIndex = activeMatchIndex(matches, editor.getSelectionStart());
+    }
+    s.search = { ...s.search, matches, activeIndex };
+    editor.setSearchHighlights(matches, activeIndex, opts.scroll);
+  }
+
+  function openSearch() {
+    if (!doc.path) return;
+    const wasOpen = s.search.open;
+    s.search = { ...s.search, open: true, focusSeq: s.search.focusSeq + 1 };
+    if (!wasOpen && s.search.query) runSearch({ resetIndex: true, scroll: true });
+    render();
+  }
+
+  const search: SearchActions = {
+    setQuery(query) {
+      s.search = { ...s.search, query };
+      runSearch({ resetIndex: true, scroll: true });
+      render();
+    },
+    toggleCase() {
+      s.search = { ...s.search, caseSensitive: !s.search.caseSensitive };
+      runSearch({ resetIndex: true, scroll: true });
+      render();
+    },
+    next() {
+      if (!s.search.matches.length) return;
+      const activeIndex = stepMatchIndex(s.search.matches.length, s.search.activeIndex, 1);
+      s.search = { ...s.search, activeIndex };
+      editor?.setSearchHighlights(s.search.matches, activeIndex, true);
+      render();
+    },
+    prev() {
+      if (!s.search.matches.length) return;
+      const activeIndex = stepMatchIndex(s.search.matches.length, s.search.activeIndex, -1);
+      s.search = { ...s.search, activeIndex };
+      editor?.setSearchHighlights(s.search.matches, activeIndex, true);
+      render();
+    },
+    close() {
+      if (!s.search.open) return;
+      resetSearch();
+      render();
+      editor?.focus();
+    },
+  };
+
   function start() {
     const onKey = (e: KeyboardEvent) => {
       if (s.loading || !(e.metaKey || e.ctrlKey)) return;
       if (e.key === "s") { e.preventDefault(); void doc.save(); }
       if (e.key === "o") { e.preventDefault(); void pickFolder(); }
-      // Platform key only: on macOS, Ctrl+E is CodeMirror's end-of-line.
+      // Platform key only: on macOS, Ctrl+E is CodeMirror's end-of-line, Ctrl+F is forward-char.
       if (e.key === "e" && (isMac ? e.metaKey : e.ctrlKey)) { e.preventDefault(); toggleView(); }
+      if (e.key === "f" && (isMac ? e.metaKey : e.ctrlKey)) { e.preventDefault(); openSearch(); }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", render);
@@ -381,5 +464,5 @@ export function createApp(render: () => void) {
     remove: forgetRecent,
   };
 
-  return { s, doc, editorEl, exists: fsx.pathExists, actions, sidebar, resize, welcome, theme, pickFolder, toggleView, start };
+  return { s, doc, editorEl, exists: fsx.pathExists, actions, sidebar, resize, welcome, theme, search, pickFolder, toggleView, start };
 }

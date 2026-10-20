@@ -4,7 +4,7 @@ import { mkdtemp, readFile, realpath, rm, mkdir, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { vi } from "vitest";
-import { EditorView } from "@codemirror/view";
+import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { undo } from "@codemirror/commands";
 import { createNodeFsx } from "./fsx-node";
 import type { Settings } from "@/platform/fsx";
@@ -175,6 +175,46 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
     /** ⌘E on macOS, Ctrl+E elsewhere; `other: true` presses the other modifier (Ctrl+E on macOS is CodeMirror's end-of-line). */
     pressViewKey: (other = false) =>
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "e", [isMac !== other ? "metaKey" : "ctrlKey"]: true })),
+    /** ⌘F on macOS, Ctrl+F elsewhere. */
+    pressSearchKey: (other = false) =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", [isMac !== other ? "metaKey" : "ctrlKey"]: true })),
+    searchBar: () => {
+      const bar = $("#search-bar");
+      if (!bar) return null;
+      return {
+        query: $<HTMLInputElement>("#search-input")!.value,
+        count: $("#search-count")!.textContent ?? "",
+        caseSensitive: $("#search-case")!.getAttribute("aria-pressed") === "true",
+        matches: [...document.querySelectorAll(".cm-search-match")].map((el) => el.textContent),
+        activeMatch: $(".cm-search-match-selected")?.textContent ?? null,
+      };
+    },
+    typeSearch(query: string) {
+      const input = $<HTMLInputElement>("#search-input")!;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(input, query);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    pressSearchInputKey(key: string, shiftKey = false) {
+      $<HTMLInputElement>("#search-input")!.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true }));
+    },
+    selectRange: (from: number, to: number) => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      view().dispatch({ selection: { anchor: from, head: to } });
+    },
+    copy() {
+      let copied = "";
+      const evt = new Event("copy", { bubbles: true, cancelable: true }) as ClipboardEvent;
+      Object.defineProperty(evt, "clipboardData", {
+        value: {
+          setData: (type: string, data: string) => { if (type === "text/plain") copied = data; },
+          getData: () => copied,
+          clearData: () => { copied = ""; },
+        },
+      });
+      $(".cm-content")!.dispatchEvent(evt);
+      return copied;
+    },
     setOsDark(dark: boolean) { os.dark = dark; os.listeners.forEach((fn) => fn({ matches: dark })); },
     /** Right-clicks a row (or the tree's empty space) and picks an item from the in-app menu. */
     async contextMenu(rel: string | null, item: string) {
@@ -208,6 +248,15 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
 
     button: (label: string) => [...document.querySelectorAll("button")].find((b) => b.textContent!.trim() === label)!.click(),
     type: (text: string) => view().dispatch({ changes: { from: view().state.doc.length, insert: text } }),
+    /** Types at a position as the user would (Preview's locks apply). */
+    typeAt: (pos: number, text: string) =>
+      view().dispatch({ changes: { from: pos, insert: text }, selection: { anchor: pos + text.length }, userEvent: "input.type" }),
+    select: (pos: number) => view().dispatch({ selection: { anchor: pos } }),
+    /** Deletes a selected range as the user would (Preview's locks apply). */
+    deleteRange: (from: number, to: number) => view().dispatch({ changes: { from, to }, userEvent: "delete.selection" }),
+    /** Real key presses, through the editor's keymaps. */
+    backspace: () => runScopeHandlers(view(), new KeyboardEvent("keydown", { key: "Backspace" }), "editor"),
+    enter: () => runScopeHandlers(view(), new KeyboardEvent("keydown", { key: "Enter" }), "editor"),
     save: () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "s", metaKey: true })),
     async renameTo(name: string) {
       await until(() => { if (!$("#tree input.rename")) throw new Error("no rename input"); });

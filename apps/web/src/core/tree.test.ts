@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  baseName, buildTree, isIgnored, isMd, joinPath, parentOf, reconcile, uniqueName, validName, walkMd, withMdExt,
+  baseName, buildTree, isIgnored, isMd, joinPath, parentOf, reconcile, relativePath, uniqueName, validName, walkMd, withMdExt,
   type Entry, type TreeIO,
 } from "./tree";
 
@@ -57,6 +57,11 @@ describe("isMd / isIgnored / path helpers", () => {
     expect(joinPath("/a", "b.md")).toBe("/a/b.md");
     expect(parentOf("/a/b/c.md")).toBe("/a/b");
     expect(baseName("/a/b/c.md")).toBe("c.md");
+    expect(relativePath("/a/b.md", "/a")).toBe("b.md");
+    expect(relativePath("/a/b/c.md", "/a")).toBe("b/c.md");
+    expect(relativePath("/a/b/c.md", "/a/")).toBe("b/c.md");
+    expect(relativePath("/a", "/a")).toBe("");
+    expect(relativePath("/other/b.md", "/a")).toBe("/other/b.md");
   });
 });
 

@@ -14,6 +14,7 @@ export function createNodeFsx() {
   const titles: string[] = [];
   const windowThemes: Real.WindowTheme[] = [];
   const events: string[] = [];
+  let clipboard = "";
   let settings: Real.Settings = {};
   let closeGuard: (() => Promise<boolean>) | null = null;
   // hold: a folder read awaits it first, so a test can keep a folder "still loading" (or make it fail).
@@ -74,6 +75,12 @@ export function createNodeFsx() {
     onCloseRequested(guard: () => Promise<boolean>) { closeGuard = guard; },
     loadSettings: async () => ({ ...settings }),
     saveSettings: async (s: Real.Settings) => { settings = { ...s }; },
+    writeClipboard: async (text: string) => {
+      clipboard = text;
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text).catch(() => {});
+      }
+    },
   } satisfies typeof Real;
 
   return {
@@ -82,6 +89,8 @@ export function createNodeFsx() {
     titles,
     windowThemes,
     events,
+    clipboard: () => clipboard,
+    setClipboard: (text: string) => { clipboard = text; },
     ctl,
     get settings(): Real.Settings { return settings; },
     set settings(s: Real.Settings) { settings = s; },

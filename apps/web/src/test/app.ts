@@ -166,6 +166,7 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
       label: $("#appearance")!.getAttribute("aria-label"),
       dark: document.documentElement.classList.contains("dark"),
     }),
+    clipboard: () => stub.clipboard(),
     // What the user does.
     click: (rel: string) => row(rel)!.click(),
     toggleAppearance: () => $("#appearance")!.click(),

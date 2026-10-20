@@ -9,7 +9,7 @@ import type { SearchActions, SearchViewState } from "./components/SearchBar";
 import type { MenuItem, Rename } from "./components/Sidebar";
 import * as recents from "@/core/recents";
 import { createTheme } from "@/platform/theme";
-import { baseName, buildTree, joinPath, parentOf, reconcile, uniqueName, validName, walkMd, withMdExt, type TreeNode } from "@/core/tree";
+import { baseName, buildTree, joinPath, parentOf, reconcile, relativePath, uniqueName, validName, walkMd, withMdExt, type TreeNode } from "@/core/tree";
 
 export const SIDEBAR_MIN = 180;
 export const SIDEBAR_DEFAULT = 260;
@@ -257,6 +257,8 @@ export function createApp(render: () => void) {
       { text: "New Folder", action: () => void newFolder(dir) },
     ];
     if (node) {
+      items.push({ text: "Copy path", action: () => void fsx.writeClipboard(node.path) });
+      items.push({ text: "Copy relative path", action: () => void fsx.writeClipboard(relativePath(node.path, s.root!)) });
       items.push({ text: "Rename", action: () => renameNode(node) });
       items.push({ text: "Move to Trash", action: () => void trashNode(node), destructive: true });
     }

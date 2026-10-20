@@ -9,6 +9,7 @@ import { diffRange } from "@/core/text";
 import type { Match } from "@/core/search";
 import { preview } from "./preview";
 import { mermaidBlocks, themeChanged } from "./mermaid";
+import { slashMenuExtension } from "./slashMenu";
 import type { EditorPort } from "@/core/doc";
 
 export type ViewMode = "formatted" | "source";
@@ -135,6 +136,7 @@ export function createEditor(
     EditorView.lineWrapping,
     keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
     markdown({ base: markdownLanguage }), // markdownLanguage = CommonMark + GFM (tables, task lists, strikethrough)
+    slashMenuExtension(() => !isReadOnly()),
     searchField,
     mode.of(modeExt()),
     readOnly.of(EditorState.readOnly.of(isReadOnly())),

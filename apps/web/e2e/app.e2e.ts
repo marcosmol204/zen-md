@@ -21,6 +21,26 @@ test("Preview mode hides markdown markers and is read-only; Cmd+E switches to So
   await expect(page).toHaveTitle("● a.md");
 });
 
+test("typing '/' in Source mode displays slash command suggestions and replaces with markdown snippet", async ({ page }) => {
+  await open(page, "Hello\n\n");
+  const content = page.locator(".cm-content");
+  await page.keyboard.press("ControlOrMeta+e");
+  await expect(page.locator(".cm-content.md-source")).toBeVisible();
+
+  // Position at the end and type /h1
+  await content.click();
+  await page.keyboard.press("PageDown");
+  await page.keyboard.type("/h1");
+
+  const tooltip = page.locator(".cm-tooltip-autocomplete");
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText("Heading 1");
+
+  await page.keyboard.press("Enter");
+  await expect(tooltip).toHaveCount(0);
+  await expect(content).toContainText("# Heading 1");
+});
+
 test("a mermaid block renders as a diagram", async ({ page }) => {
   await open(page, "intro\n\n```mermaid\nflowchart LR\n  A --> B\n```\n");
   await expect(page.locator(".md-mermaid svg")).toBeVisible();

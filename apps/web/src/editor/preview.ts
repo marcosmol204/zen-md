@@ -7,6 +7,7 @@ import { syntaxTree } from "@codemirror/language";
 import { highlightCode } from "codemirror-live-markdown";
 import { htmlTokens, type Token } from "@/core/highlight";
 import { isDelimiterRow, plainCell, rowCells } from "@/core/table";
+import { toggleTaskMarker } from "@/core/text";
 
 const hide = (widget?: WidgetType, fence = false) => Decoration.replace({ widget, fence });
 
@@ -43,11 +44,17 @@ function build(state: EditorState): DecorationSet {
           const cls = `md-code-line${l === first ? " md-code-first" : ""}${l === last ? " md-code-last" : ""}`;
           out.push(Decoration.line({ class: cls }).range(doc.line(l).from));
         }
+        const codeTextNode = n.node.getChild("CodeText");
+        const rawCode = codeTextNode ? doc.sliceString(codeTextNode.from, codeTextNode.to) : "";
         // Fence lines (``` + language) hide; their lines stay as the code box's top and bottom padding.
-        for (const mark of n.node.getChildren("CodeMark")) {
+        const marks = n.node.getChildren("CodeMark");
+        marks.forEach((mark, idx) => {
           const line = doc.lineAt(mark.from);
-          if (mark.from < line.to) out.push(hide(undefined, true).range(mark.from, line.to));
-        }
+          if (mark.from < line.to) {
+            const widget = idx === 0 && name === "FencedCode" ? new CopyCodeWidget(rawCode) : undefined;
+            out.push(hide(widget, true).range(mark.from, line.to));
+          }
+        });
         return; // inside a quote the code lines still carry "> " prefixes, hidden below
       }
       if (name === "Table") {
@@ -74,6 +81,13 @@ function build(state: EditorState): DecorationSet {
         if (marks.length < 2) return;
         const content = { from: marks[0].to, to: (name === "Link" ? marks[1] : marks[marks.length - 1]).from };
         if (n.from < content.from) out.push(hide().range(n.from, content.from));
+        if (name === "Link" && content.from < content.to) {
+          const urlNode = n.node.getChild("URL");
+          const href = urlNode ? doc.sliceString(urlNode.from, urlNode.to).trim() : "";
+          if (href) {
+            out.push(Decoration.mark({ class: "md-link", attributes: { "data-href": href } }).range(content.from, content.to));
+          }
+        }
         if (content.to < n.to) out.push(hide().range(content.to, n.to));
         return;
       }
@@ -105,8 +119,13 @@ function build(state: EditorState): DecorationSet {
     const task = p.marks.find((m) => m.name === "TaskMarker");
     const list = [...p.marks].reverse().find((m) => m.name === "ListMark");
     let widget: WidgetType | undefined;
-    if (task) widget = new Bullet(p.depth, { checked: /x/i.test(doc.sliceString(task.from, task.to)) });
-    else if (list) {
+    if (task) {
+      widget = new Bullet(p.depth, {
+        checked: /x/i.test(doc.sliceString(task.from, task.to)),
+        from: task.from,
+        to: task.to,
+      });
+    } else if (list) {
       const mark = doc.sliceString(list.from, list.to);
       widget = new Bullet(p.depth, /\d/.test(mark) ? mark : "•");
     }
@@ -122,13 +141,37 @@ function listDepth(node: TreeNode): number {
   return Math.max(0, depth);
 }
 
-/** The list marker (bullet, number or read-only checkbox) that stands in for a hidden list prefix. */
+const COPY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
+const CHECK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
+
+class CopyCodeWidget extends WidgetType {
+  constructor(readonly code: string) { super(); }
+  eq(o: CopyCodeWidget) { return o.code === this.code; }
+  toDOM() {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "md-code-copy";
+    btn.setAttribute("aria-label", "Copy code");
+    btn.title = "Copy code";
+    btn.dataset.code = this.code;
+    btn.innerHTML = COPY_SVG;
+    return btn;
+  }
+  ignoreEvent() { return false; }
+}
+
+/** The list marker (bullet, number or interactive checkbox) that stands in for a hidden list prefix. */
 class Bullet extends WidgetType {
-  constructor(readonly depth: number, readonly mark: string | { checked: boolean }) { super(); }
+  constructor(
+    readonly depth: number,
+    readonly mark: string | { checked: boolean; from: number; to: number },
+  ) {
+    super();
+  }
   eq(o: Bullet) {
     return o.depth === this.depth && (typeof o.mark === "string" || typeof this.mark === "string"
       ? o.mark === this.mark
-      : o.mark.checked === this.mark.checked);
+      : o.mark.checked === this.mark.checked && o.mark.from === this.mark.from && o.mark.to === this.mark.to);
   }
   toDOM() {
     const wrap = document.createElement("span");
@@ -145,7 +188,8 @@ class Bullet extends WidgetType {
     const box = document.createElement("input");
     box.type = "checkbox";
     box.checked = mark.checked;
-    box.disabled = true;
+    box.dataset.taskFrom = String(mark.from);
+    box.dataset.taskTo = String(mark.to);
     box.className = "md-task";
     wrap.append(box);
     return wrap;
@@ -211,17 +255,20 @@ class TableWidget extends WidgetType {
 
 /** Read-only rendering of a cell that holds markup: bold, italic, strike, code, links. */
 function renderInline(el: HTMLElement, text: string) {
-  const re = /(\*\*|__)(.+?)\1|(\*|_)(.+?)\3|~~(.+?)~~|`([^`]+)`|!?\[([^\]]*)\]\([^)]*\)|\\(.)/g;
+  const re = /(\*\*|__)(.+?)\1|(\*|_)(.+?)\3|~~(.+?)~~|`([^`]+)`|!?\[([^\]]*)\]\(([^)]*)\)|\\(.)/g;
   let last = 0;
   for (const m of text.matchAll(re)) {
     el.append(text.slice(last, m.index));
     const [tag, inner] = m[2] != null ? ["strong", m[2]] : m[4] != null ? ["em", m[4]] : m[5] != null ? ["s", m[5]]
-      : m[6] != null ? ["code", m[6]] : m[7] != null ? ["span", m[7]] : ["", m[8]];
+      : m[6] != null ? ["code", m[6]] : m[7] != null ? ["span", m[7]] : ["", m[9]];
     if (!tag) el.append(inner);
     else {
       const child = document.createElement(tag);
       if (tag === "code") child.className = "cm-code";
-      if (tag === "span") child.className = "cm-link";
+      if (tag === "span") {
+        child.className = "cm-link md-link";
+        if (m[8] && !m[0].startsWith("!")) child.dataset.href = m[8].trim();
+      }
       if (tag === "code") child.textContent = inner;
       else renderInline(child, inner);
       el.append(child);
@@ -318,6 +365,61 @@ const previewCopy = EditorView.domEventHandlers({
   },
 });
 
-export function preview(): Extension {
-  return [previewField, codeHighlight, previewCopy];
+export type PreviewOptions = {
+  onLinkClick?(href: string): void;
+  onCopyCode?(code: string): void;
+  canToggleTask?(): boolean;
+};
+
+export function preview(opts?: PreviewOptions): Extension {
+  const previewEvents = EditorView.domEventHandlers({
+    click(event, view) {
+      const el = event.target instanceof Element ? event.target : null;
+      if (!el) return false;
+
+      const copyBtn = el.closest<HTMLButtonElement>("button.md-code-copy");
+      if (copyBtn) {
+        event.preventDefault();
+        const code = copyBtn.dataset.code ?? "";
+        opts?.onCopyCode?.(code);
+        copyBtn.dataset.copied = "true";
+        copyBtn.setAttribute("aria-label", "Copied");
+        copyBtn.innerHTML = CHECK_SVG;
+        window.setTimeout(() => {
+          if (copyBtn.isConnected) {
+            delete copyBtn.dataset.copied;
+            copyBtn.setAttribute("aria-label", "Copy code");
+            copyBtn.innerHTML = COPY_SVG;
+          }
+        }, 1500);
+        return true;
+      }
+
+      const taskBox = el.closest<HTMLInputElement>("input.md-task");
+      if (taskBox) {
+        event.preventDefault();
+        if (opts?.canToggleTask && !opts.canToggleTask()) return true;
+        const from = Number(taskBox.dataset.taskFrom);
+        const to = Number(taskBox.dataset.taskTo);
+        if (Number.isFinite(from) && Number.isFinite(to) && from >= 0 && to <= view.state.doc.length) {
+          const next = toggleTaskMarker(view.state.sliceDoc(from, to));
+          view.dispatch({ changes: { from, to, insert: next } });
+        }
+        return true;
+      }
+
+      if (opts?.onLinkClick) {
+        const link = el.closest<HTMLElement>("[data-href]");
+        const href = link?.dataset.href;
+        if (href) {
+          event.preventDefault();
+          opts.onLinkClick(href);
+          return true;
+        }
+      }
+
+      return false;
+    },
+  });
+  return [previewField, codeHighlight, previewCopy, previewEvents];
 }

@@ -18,6 +18,7 @@ export type EditorHandle = EditorPort & {
   themeChanged(): void;
   setMode(mode: ViewMode): void;
   getSelectionStart(): number;
+  scrollToPos(pos: number): void;
   setSearchHighlights(matches: readonly Match[], activeIndex: number, scroll?: boolean): void;
 };
 
@@ -89,7 +90,15 @@ const blockReadOnlyUserEdits = EditorState.transactionFilter.of((tr) =>
   tr.docChanged && tr.startState.readOnly && tr.annotation(Transaction.userEvent) ? [] : tr,
 );
 
-export function createEditor(parent: HTMLElement, opts: { onUserEdit(): void; onDocChange?(): void }): EditorHandle {
+export function createEditor(
+  parent: HTMLElement,
+  opts: {
+    onUserEdit(): void;
+    onDocChange?(): void;
+    onLinkClick?(href: string): void;
+    onCopyCode?(code: string): void;
+  },
+): EditorHandle {
   const readOnly = new Compartment();
   const images = new Compartment();
   const mode = new Compartment();
@@ -101,7 +110,11 @@ export function createEditor(parent: HTMLElement, opts: { onUserEdit(): void; on
   // Preview (formatted): markdown rendered, markup hidden, strictly read-only.
   // Source (edit) mode: raw markdown with syntax colouring, editable when doc is not read-only.
   const formatted = (): Extension => [
-    preview(),
+    preview({
+      onLinkClick: opts.onLinkClick,
+      onCopyCode: opts.onCopyCode,
+      canToggleTask: () => !docReadOnly,
+    }),
     markdownStylePlugin,
     editorTheme,
     mathPlugin,
@@ -170,6 +183,14 @@ export function createEditor(parent: HTMLElement, opts: { onUserEdit(): void; on
       });
     },
     getSelectionStart: () => view.state.selection.main.from,
+    scrollToPos(pos) {
+      const clamped = Math.max(0, Math.min(pos, view.state.doc.length));
+      view.dispatch({
+        selection: { anchor: clamped },
+        effects: EditorView.scrollIntoView(clamped, { y: "start" }),
+      });
+      view.focus();
+    },
     setSearchHighlights(matches, activeIndex, scroll = false) {
       const effects: StateEffect<unknown>[] = [setSearch.of({ matches, active: activeIndex })];
       if (scroll && activeIndex >= 0 && activeIndex < matches.length) {

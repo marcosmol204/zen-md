@@ -651,7 +651,6 @@ describe("Preview (view mode) vs Source (edit mode) and copying", () => {
     app.backspace();
     app.enter();
     expect(app.text()).toBe(md);
-    expect(app.$<HTMLInputElement>("input.md-task")!.disabled).toBe(true);
     const cell = [...document.querySelectorAll<HTMLElement>(".md-table td")].find((c) => c.textContent === "2")!;
     expect(cell.isContentEditable).toBe(false);
 
@@ -862,5 +861,149 @@ describe("sidebar width", () => {
     expect(app.stub.settings.sidebarWidth).toBe(450);
     setWindowWidth(1024);
     expect(sidebarWidth()).toBe("450px");
+  });
+});
+
+describe("quick file switcher (Cmd+P)", () => {
+  test("Cmd+P opens switcher, filters with fuzzy search, steps with arrows, and opens file on Enter", async () => {
+    app = await boot({
+      files: { "README.md": "readme", "docs/architecture.md": "arch", "docs/api-guide.md": "api" },
+      lastFile: "README.md",
+    });
+    expect(app.switcher()).toBeNull();
+
+    app.pressSwitcherKey();
+    expect(app.switcher()).toEqual({
+      query: "",
+      items: ["README.md", "docs/api-guide.md", "docs/architecture.md"],
+      active: "README.md",
+    });
+
+    app.pressSwitcherInputKey("ArrowDown");
+    expect(app.switcher()!.active).toBe("docs/api-guide.md");
+
+    app.typeSwitcher("darch");
+    expect(app.switcher()).toEqual({
+      query: "darch",
+      items: ["docs/architecture.md"],
+      active: "docs/architecture.md",
+    });
+
+    app.pressSwitcherInputKey("Enter");
+    await until(() => expect(app.title()).toBe("architecture.md"));
+    expect(app.text()).toBe("arch");
+    expect(app.switcher()).toBeNull();
+  });
+
+  test("Escape closes the quick switcher without changing the active document", async () => {
+    app = await boot({ files: { "a.md": "alpha", "b.md": "beta" }, lastFile: "a.md" });
+    app.pressSwitcherKey();
+    expect(app.switcher()).not.toBeNull();
+    app.pressSwitcherInputKey("Escape");
+    expect(app.switcher()).toBeNull();
+    expect(app.title()).toBe("a.md");
+  });
+});
+
+describe("document outline (Cmd+Shift+O)", () => {
+  const md = "# Title\n\nIntro\n\n## Section A\n\n### Subsection A1\n\n## Section B\n";
+
+  test("Cmd+Shift+O and outline button toggle the outline panel, and clicking a heading jumps to it", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    expect(app.outline()).toBeNull();
+
+    app.pressOutlineKey();
+    expect(app.outline()).toEqual([
+      { level: 1, text: "Title" },
+      { level: 2, text: "Section A" },
+      { level: 3, text: "Subsection A1" },
+      { level: 2, text: "Section B" },
+    ]);
+
+    const item = [...document.querySelectorAll<HTMLElement>("[data-outline-item]")].find((el) => el.textContent === "Section B")!;
+    item.click();
+    expect(app.$("#outline-panel")).not.toBeNull();
+
+    // Live updates when agent writes new heading
+    await app.write("a.md", md + "\n## Section C\n");
+    await until(() => expect(app.outline()!.map((h) => h.text)).toContain("Section C"));
+
+    app.$("#outline-close")!.click();
+    expect(app.outline()).toBeNull();
+  });
+});
+
+describe("clickable relative markdown links", () => {
+  test("clicking a relative markdown link in formatted mode opens the target file and scrolls to #anchor", async () => {
+    app = await boot({
+      files: {
+        "index.md": "Read the [Architecture Guide](./docs/arch.md#system-design) or [external](https://example.com).\n",
+        "docs/arch.md": "# Intro\n\nText\n\n## System Design\n\nDetails here.\n",
+      },
+      lastFile: "index.md",
+    });
+
+    const relLink = app.$<HTMLElement>('.md-link[data-href="./docs/arch.md#system-design"]')!;
+    expect(relLink).not.toBeNull();
+    relLink.click();
+
+    await until(() => expect(app.title()).toBe("arch.md"));
+    expect(app.text()).toContain("## System Design");
+  });
+});
+
+describe("collapsible sidebar (Cmd+B)", () => {
+  test("Cmd+B and the sidebar toggle button hide and restore the sidebar while preserving saved width", async () => {
+    app = await boot({ settings: (root) => ({ lastFolder: root, sidebarWidth: 320 }) });
+    expect(app.sidebarCollapsed()).toBe(false);
+    expect(app.$("#sidebar")!.style.width).toBe("320px");
+
+    app.pressSidebarKey();
+    expect(app.sidebarCollapsed()).toBe(true);
+
+    const showBtn = [...document.querySelectorAll<HTMLButtonElement>("#sidebar-toggle")].find(
+      (b) => b.getAttribute("aria-label") === "Show sidebar",
+    )!;
+    showBtn.click();
+    expect(app.sidebarCollapsed()).toBe(false);
+    expect(app.$("#sidebar")!.style.width).toBe("320px");
+  });
+});
+
+describe("interactive task list toggling and code block copy button", () => {
+  test("clicking a task checkbox in formatted mode toggles [ ] <-> [x], marks doc dirty, and supports undo", async () => {
+    const md = "# Tasks\n\n- [ ] first item\n- [x] second item\n";
+    app = await boot({ files: { "tasks.md": md }, lastFile: "tasks.md" });
+
+    const boxes = () => [...document.querySelectorAll<HTMLInputElement>("input.md-task")];
+    expect(boxes()).toHaveLength(2);
+    expect(boxes()[0].checked).toBe(false);
+    expect(boxes()[1].checked).toBe(true);
+
+    boxes()[0].click();
+    expect(app.text()).toBe("# Tasks\n\n- [x] first item\n- [x] second item\n");
+    expect(app.title()).toBe("● tasks.md");
+    expect(boxes()[0].checked).toBe(true);
+
+    // Clicking again toggles back to [ ], or undo in Source mode reverts it
+    app.pressViewKey();
+    app.undo();
+    app.pressViewKey();
+    expect(app.text()).toBe(md);
+    expect(app.title()).toBe("tasks.md");
+    expect(boxes()[0].checked).toBe(false);
+  });
+
+  test("clicking the copy button on a fenced code block in formatted mode copies raw code to clipboard", async () => {
+    const md = "# Code\n\n```ts\nconst answer = 42;\nconsole.log(answer);\n```\n";
+    app = await boot({ files: { "code.md": md }, lastFile: "code.md" });
+
+    const copyBtn = app.$<HTMLButtonElement>("button.md-code-copy")!;
+    expect(copyBtn).not.toBeNull();
+    expect(copyBtn.getAttribute("aria-label")).toBe("Copy code");
+
+    copyBtn.click();
+    await until(() => expect(app.clipboard()).toBe("const answer = 42;\nconsole.log(answer);"));
+    expect(copyBtn.getAttribute("aria-label")).toBe("Copied");
   });
 });

@@ -179,6 +179,42 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
     /** ⌘F on macOS, Ctrl+F elsewhere. */
     pressSearchKey: (other = false) =>
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", [isMac !== other ? "metaKey" : "ctrlKey"]: true })),
+    /** ⌘P on macOS, Ctrl+P elsewhere. */
+    pressSwitcherKey: (other = false) =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "p", [isMac !== other ? "metaKey" : "ctrlKey"]: true })),
+    /** ⇧⌘O on macOS, Ctrl+Shift+O elsewhere. */
+    pressOutlineKey: (other = false) =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "O", shiftKey: true, [isMac !== other ? "metaKey" : "ctrlKey"]: true })),
+    /** ⌘B on macOS, Ctrl+B elsewhere. */
+    pressSidebarKey: (other = false) =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "b", [isMac !== other ? "metaKey" : "ctrlKey"]: true })),
+    sidebarCollapsed: () => $("#sidebar")!.hidden,
+    outline: () => {
+      const panel = $("#outline-panel");
+      if (!panel) return null;
+      return [...panel.querySelectorAll<HTMLElement>("[data-outline-item]")].map((el) => ({
+        level: Number(el.dataset.level),
+        text: el.textContent ?? "",
+      }));
+    },
+    switcher: () => {
+      const el = $("#quick-switcher");
+      if (!el) return null;
+      return {
+        query: $<HTMLInputElement>("#quick-switcher-input")!.value,
+        items: [...el.querySelectorAll<HTMLElement>("[data-switcher-item]")].map((i) => i.dataset.path!.slice(root.length + 1)),
+        active: el.querySelector<HTMLElement>("[data-switcher-item][data-active=true]")?.dataset.path?.slice(root.length + 1) ?? null,
+      };
+    },
+    typeSwitcher(query: string) {
+      const input = $<HTMLInputElement>("#quick-switcher-input")!;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(input, query);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    },
+    pressSwitcherInputKey(key: string) {
+      $<HTMLInputElement>("#quick-switcher-input")!.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    },
     searchBar: () => {
       const bar = $("#search-bar");
       if (!bar) return null;

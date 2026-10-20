@@ -64,3 +64,8 @@ export function conflictCopyPath(path: string, now: Date): string {
     ? `${path.slice(0, dot)}.conflict-${stamp}${path.slice(dot)}`
     : `${path}.conflict-${stamp}.md`;
 }
+
+/** Flips a GFM task list marker (`[ ]` ↔ `[x]`). */
+export function toggleTaskMarker(marker: string): string {
+  return /x/i.test(marker) ? "[ ]" : "[x]";
+}

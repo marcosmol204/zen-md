@@ -46,6 +46,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: "Editing & Navigation",
     items: [
+      { label: "Slash commands (Source mode)", keys: "/" },
       { label: "Undo", keys: isMac ? "⌘Z" : "Ctrl+Z" },
       { label: "Redo", keys: isMac ? "⇧⌘Z" : "Ctrl+Shift+Z" },
       { label: "Next / previous search match", keys: isMac ? "Enter / ⇧Enter" : "Enter / Shift+Enter" },

@@ -1007,3 +1007,36 @@ describe("interactive task list toggling and code block copy button", () => {
     expect(copyBtn.getAttribute("aria-label")).toBe("Copied");
   });
 });
+
+describe("keyboard shortcuts modal (? button and Cmd+/)", () => {
+  test("clicking the ? button opens the shortcuts modal with all shortcuts, and Escape or close button dismisses it", async () => {
+    app = await boot({ files: { "a.md": "hello" }, lastFile: "a.md" });
+    expect(app.shortcuts()).toBeNull();
+
+    const btn = app.$("#shortcuts-button")!;
+    expect(btn).not.toBeNull();
+    expect(btn.textContent?.trim()).toBe("?");
+    btn.click();
+
+    const list = app.shortcuts();
+    expect(list).not.toBeNull();
+    const labels = list!.map((s) => s.label);
+    expect(labels).toContain("Open folder");
+    expect(labels).toContain("Quick file switcher");
+    expect(labels).toContain("Toggle sidebar");
+    expect(labels).toContain("Save file");
+    expect(labels).toContain("Toggle Formatted / Source view");
+    expect(labels).toContain("Toggle document outline");
+    expect(labels).toContain("Find in document");
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(app.shortcuts()).toBeNull();
+
+    app.pressShortcutsKey();
+    expect(app.shortcuts()).not.toBeNull();
+
+    app.$("#shortcuts-close")!.click();
+    expect(app.shortcuts()).toBeNull();
+  });
+});
+

@@ -188,7 +188,18 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
     /** ⌘B on macOS, Ctrl+B elsewhere. */
     pressSidebarKey: (other = false) =>
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "b", [isMac !== other ? "metaKey" : "ctrlKey"]: true })),
+    /** ⌘/ on macOS, Ctrl+/ elsewhere. */
+    pressShortcutsKey: (other = false) =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "/", [isMac !== other ? "metaKey" : "ctrlKey"]: true })),
     sidebarCollapsed: () => $("#sidebar")!.hidden,
+    shortcuts: () => {
+      const modal = $("#shortcuts-modal");
+      if (!modal) return null;
+      return [...modal.querySelectorAll<HTMLElement>("[data-shortcut-item]")].map((el) => ({
+        label: el.querySelector("span")?.textContent ?? "",
+        keys: el.querySelector("kbd")?.textContent ?? "",
+      }));
+    },
     outline: () => {
       const panel = $("#outline-panel");
       if (!panel) return null;

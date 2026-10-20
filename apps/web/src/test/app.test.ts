@@ -610,6 +610,154 @@ describe("view mode", () => {
   });
 });
 
+describe("Preview (view mode) vs Source (edit mode) and copying", () => {
+  const md = "# Title\n\nSome **bold** and `inline` and [a link](https://x.dev) here.\n\n- one\n- [ ] task\n\n> quoted\n\n```js\nconst x = 1;\n```\n\n| a | b |\n| - | - |\n| 1 | 2 |\n";
+
+  test("shows no markdown symbols in Preview, even with the cursor on a line", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    for (const pos of [0, 3, md.indexOf("bold"), md.indexOf("one")]) {
+      app.select(pos);
+      const shown = app.shown()!;
+      for (const sym of ["# ", "**", "](", "https://x.dev", "- one", "> ", "| a |", "[ ]", "```js"]) expect(shown).not.toContain(sym);
+    }
+    expect(app.shown()).toContain("Title");
+    expect(app.shown()).toContain("bold");
+    expect(app.shown()).toContain("const x = 1;");
+  });
+
+  test("Preview is strictly read-only; Cmd+E switches to Source (edit) mode where editing works", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    expect(app.editable()).toBe(false);
+    app.typeAt(md.indexOf("bold") + 2, "XX");
+    app.select(2);
+    app.backspace();
+    app.enter();
+    expect(app.text()).toBe(md);
+    expect(app.$<HTMLInputElement>("input.md-task")!.disabled).toBe(true);
+    const cell = [...document.querySelectorAll<HTMLElement>(".md-table td")].find((c) => c.textContent === "2")!;
+    expect(cell.isContentEditable).toBe(false);
+
+    // Switch to Source (edit) mode via Cmd+E
+    app.pressViewKey();
+    expect(app.editable()).toBe(true);
+    app.typeAt(md.indexOf("bold") + 2, "XX");
+    expect(app.text()).toBe(md.replace("**bold**", "**boXXld**"));
+
+    // Switch back to Preview (view) mode via Cmd+E
+    app.pressViewKey();
+    expect(app.editable()).toBe(false);
+    app.typeAt(0, "nope");
+    expect(app.text()).toBe(md.replace("**bold**", "**boXXld**"));
+  });
+
+  test("an agent's write still lands while in Preview", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    await app.write("a.md", "## New\n\n**all** changed\n");
+    await until(() => expect(app.text()).toBe("## New\n\n**all** changed\n"));
+  });
+
+  test("supports copying from both Preview mode (rendered text & code) and Source mode (raw markdown)", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    // Copy formatted span in Preview mode: strips hidden markdown syntax
+    app.selectRange(md.indexOf("Some"), md.indexOf(" here."));
+    expect(app.copy()).toBe("Some bold and inline and a link");
+
+    // Copy highlighted code block in Preview mode (even when selection covers fence lines)
+    app.selectRange(md.indexOf("```js"), md.indexOf("```\n\n|") + 3);
+    expect(app.copy()).toBe("const x = 1;");
+
+    // Copy table in Preview mode
+    app.selectRange(md.indexOf("| a |"), md.length - 1);
+    expect(app.copy()).toBe("a\tb\n1\t2");
+
+    // Switch to Source (edit) mode: copy returns raw markdown
+    app.pressViewKey();
+    app.selectRange(md.indexOf("Some"), md.indexOf(" here."));
+    expect(app.copy()).toBe("Some **bold** and `inline` and [a link](https://x.dev)");
+  });
+});
+
+describe("search (Cmd+F)", () => {
+  const md = "# Alpha\n\nSome alpha text and ALPHA again.\n\nSecond beta line.\n";
+
+  test("Cmd+F opens the search bar, finds case-insensitive matches by default, and cycles with Enter / Shift+Enter and buttons", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    expect(app.searchBar()).toBeNull();
+
+    app.pressSearchKey();
+    expect(app.searchBar()).toEqual({ query: "", count: "", caseSensitive: false, matches: [], activeMatch: null });
+
+    app.typeSearch("alpha");
+    expect(app.searchBar()).toEqual({
+      query: "alpha",
+      count: "1 of 3",
+      caseSensitive: false,
+      matches: ["Alpha", "alpha", "ALPHA"],
+      activeMatch: "Alpha",
+    });
+
+    app.pressSearchInputKey("Enter");
+    expect(app.searchBar()!.count).toBe("2 of 3");
+    expect(app.searchBar()!.activeMatch).toBe("alpha");
+
+    app.$("#search-next")!.click();
+    expect(app.searchBar()!.count).toBe("3 of 3");
+    expect(app.searchBar()!.activeMatch).toBe("ALPHA");
+
+    // Wraps around to 1
+    app.pressSearchInputKey("Enter");
+    expect(app.searchBar()!.count).toBe("1 of 3");
+
+    // Previous wraps around to 3
+    app.pressSearchInputKey("Enter", true);
+    expect(app.searchBar()!.count).toBe("3 of 3");
+
+    app.$("#search-prev")!.click();
+    expect(app.searchBar()!.count).toBe("2 of 3");
+  });
+
+  test("Match case toggle switches between case-insensitive and case-sensitive search", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    app.pressSearchKey();
+    app.typeSearch("Alpha");
+    expect(app.searchBar()!.count).toBe("1 of 3");
+
+    app.$("#search-case")!.click();
+    expect(app.searchBar()).toEqual({
+      query: "Alpha",
+      count: "1 of 1",
+      caseSensitive: true,
+      matches: ["Alpha"],
+      activeMatch: "Alpha",
+    });
+
+    app.typeSearch("nonexistent");
+    expect(app.searchBar()!.count).toBe("No results");
+    expect(app.searchBar()!.matches).toEqual([]);
+  });
+
+  test("updates matches live when the document changes, and Escape closes the search bar and clears highlights", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    app.pressSearchKey();
+    app.typeSearch("beta");
+    expect(app.searchBar()!.count).toBe("1 of 1");
+
+    await app.write("a.md", md + "\nAnother beta here.\n");
+    await until(() => expect(app.searchBar()!.count).toBe("1 of 2"));
+
+    app.pressSearchInputKey("Escape");
+    expect(app.searchBar()).toBeNull();
+    expect(document.querySelectorAll(".cm-search-match")).toHaveLength(0);
+  });
+
+  test("on the welcome screen Cmd+F does nothing", async () => {
+    app = await boot({ files: { "a.md": md } });
+    expect(app.welcome()).not.toBeNull();
+    app.pressSearchKey();
+    expect(app.searchBar()).toBeNull();
+  });
+});
+
 describe("sidebar width", () => {
   const sidebarWidth = () => app.$("#sidebar")!.style.width;
   const viewport = (width: number) => (window as unknown as { happyDOM: { setViewport(v: { width: number }): void } }).happyDOM.setViewport({ width });

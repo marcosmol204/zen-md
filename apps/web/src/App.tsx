@@ -8,6 +8,7 @@ import type { ViewMode } from "@/editor/editor";
 import { Banner } from "./components/Banner";
 import { ConfirmHost } from "./components/ConfirmHost";
 import { Editor } from "./components/Editor";
+import { SearchBar } from "./components/SearchBar";
 import { Sidebar } from "./components/Sidebar";
 import { Welcome } from "./components/Welcome";
 import type { Mode } from "@/platform/theme";
@@ -51,6 +52,7 @@ export default function App() {
         {/* Wrapper anchors the button to the editor, below the banner. */}
         <div className="relative flex min-h-0 flex-1 flex-col" hidden={!doc.path}>
           <Editor el={app.editorEl} />
+          {doc.path && <SearchBar state={s.search} on={app.search} />}
           {doc.path && <ViewModeButton mode={s.view} onClick={app.toggleView} />}
         </div>
       </main>

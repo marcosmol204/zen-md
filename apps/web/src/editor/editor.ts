@@ -1,24 +1,50 @@
-import { Annotation, Compartment, EditorState, Transaction, type Extension } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, drawSelection, keymap, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import {
-  blockMathField, codeBlockField, collapseOnSelectionFacet, editorTheme, imageField, linkPlugin,
-  livePreviewPlugin, markdownStylePlugin, mathPlugin, mouseSelectingField, setMouseSelecting, tableField,
-} from "codemirror-live-markdown";
+import { blockMathField, editorTheme, imageField, markdownStylePlugin, mathPlugin } from "codemirror-live-markdown";
 import { diffRange } from "@/core/text";
-import { taskCheckboxes } from "./tasks";
+import type { Match } from "@/core/search";
+import { preview } from "./preview";
 import { mermaidBlocks, themeChanged } from "./mermaid";
 import type { EditorPort } from "@/core/doc";
 
 export type ViewMode = "formatted" | "source";
 export type EditorHandle = EditorPort & {
-  focus(): void; setImageBase(url: string): void; themeChanged(): void; setMode(mode: ViewMode): void;
+  focus(): void;
+  setImageBase(url: string): void;
+  themeChanged(): void;
+  setMode(mode: ViewMode): void;
+  getSelectionStart(): number;
+  setSearchHighlights(matches: readonly Match[], activeIndex: number, scroll?: boolean): void;
 };
 
 const external = Annotation.define<boolean>();
+
+type SearchHighlightState = { matches: readonly Match[]; active: number };
+const setSearch = StateEffect.define<SearchHighlightState>();
+const matchMark = Decoration.mark({ class: "cm-search-match" });
+const activeMatchMark = Decoration.mark({ class: "cm-search-match cm-search-match-selected" });
+
+const searchField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setSearch)) {
+        const { matches, active } = e.value;
+        return Decoration.set(
+          matches
+            .filter((m) => m.from < m.to && m.to <= tr.state.doc.length)
+            .map((m, i) => (i === active ? activeMatchMark : matchMark).range(m.from, m.to)),
+        );
+      }
+    }
+    return tr.docChanged ? deco.map(tr.changes) : deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 // codemirror-live-markdown leaves blockquotes unstyled: mark their lines so styles.css can draw the bar.
 const quoteLine = Decoration.line({ class: "md-quote" });
@@ -49,29 +75,46 @@ const sourceStyle = HighlightStyle.define([
   { tag: [tags.processingInstruction, tags.contentSeparator, tags.quote, tags.monospace], color: "hsl(var(--muted-foreground))" },
 ]);
 
-export function createEditor(parent: HTMLElement, opts: { onUserEdit(): void }): EditorHandle {
+const sourceCopy = EditorView.domEventHandlers({
+  copy(event, view) {
+    const ranges = view.state.selection.ranges.filter((r) => !r.empty);
+    if (!ranges.length || !event.clipboardData) return false;
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", ranges.map((r) => view.state.sliceDoc(r.from, r.to)).join("\n"));
+    return true;
+  },
+});
+
+const blockReadOnlyUserEdits = EditorState.transactionFilter.of((tr) =>
+  tr.docChanged && tr.startState.readOnly && tr.annotation(Transaction.userEvent) ? [] : tr,
+);
+
+export function createEditor(parent: HTMLElement, opts: { onUserEdit(): void; onDocChange?(): void }): EditorHandle {
   const readOnly = new Compartment();
   const images = new Compartment();
   const mode = new Compartment();
   let viewMode: ViewMode = "formatted";
+  let docReadOnly = true;
   let imageExt = imageField();
-  // Everything that renders markdown instead of showing it; Source mode swaps it all out at once.
+  const isReadOnly = () => docReadOnly || viewMode === "formatted";
+
+  // Preview (formatted): markdown rendered, markup hidden, strictly read-only.
+  // Source (edit) mode: raw markdown with syntax colouring, editable when doc is not read-only.
   const formatted = (): Extension => [
-    collapseOnSelectionFacet.of(true),
-    livePreviewPlugin,
+    preview(),
     markdownStylePlugin,
     editorTheme,
     mathPlugin,
     blockMathField,
-    tableField,
     mermaidBlocks,
-    codeBlockField({ copyButton: true }),
     images.of(imageExt),
-    linkPlugin(),
-    taskCheckboxes,
     quotes,
   ];
-  const source: Extension = [syntaxHighlighting(sourceStyle), EditorView.contentAttributes.of({ class: "md-source" })];
+  const source: Extension = [
+    syntaxHighlighting(sourceStyle),
+    EditorView.contentAttributes.of({ class: "md-source" }),
+    sourceCopy,
+  ];
   const modeExt = () => (viewMode === "formatted" ? formatted() : source);
   const extensions = (): Extension[] => [
     history(),
@@ -79,24 +122,25 @@ export function createEditor(parent: HTMLElement, opts: { onUserEdit(): void }):
     EditorView.lineWrapping,
     keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
     markdown({ base: markdownLanguage }), // markdownLanguage = CommonMark + GFM (tables, task lists, strikethrough)
-    mouseSelectingField, // outside `mode` so the mouse listeners below can always dispatch to it
+    searchField,
     mode.of(modeExt()),
-    readOnly.of(EditorState.readOnly.of(true)),
+    readOnly.of(EditorState.readOnly.of(isReadOnly())),
+    blockReadOnlyUserEdits,
     EditorView.updateListener.of((u) => {
-      if (u.docChanged && !u.transactions.some((t) => t.annotation(external))) opts.onUserEdit();
+      if (!u.docChanged) return;
+      if (!u.transactions.some((t) => t.annotation(external))) opts.onUserEdit();
+      opts.onDocChange?.();
     }),
   ];
 
   const view = new EditorView({ parent, state: EditorState.create({ doc: "", extensions: extensions() }) });
-  view.contentDOM.addEventListener("mousedown", () => view.dispatch({ effects: setMouseSelecting.of(true) }));
-  document.addEventListener("mouseup", () =>
-    requestAnimationFrame(() => view.dispatch({ effects: setMouseSelecting.of(false) })));
 
   return {
     getText: () => view.state.doc.toString(),
     load(text) {
       view.setState(EditorState.create({ doc: text, extensions: extensions() }));
       view.scrollDOM.scrollTop = 0;
+      opts.onDocChange?.();
     },
     applyExternal(text) {
       const change = diffRange(view.state.doc.toString(), text);
@@ -107,7 +151,8 @@ export function createEditor(parent: HTMLElement, opts: { onUserEdit(): void }):
       if (atBottom) view.dispatch({ effects: EditorView.scrollIntoView(view.state.doc.length, { y: "end" }) });
     },
     setReadOnly(ro) {
-      view.dispatch({ effects: readOnly.reconfigure(EditorState.readOnly.of(ro)) });
+      docReadOnly = ro;
+      view.dispatch({ effects: readOnly.reconfigure(EditorState.readOnly.of(isReadOnly())) });
     },
     setImageBase(url) {
       imageExt = imageField({ basePath: url });
@@ -117,7 +162,20 @@ export function createEditor(parent: HTMLElement, opts: { onUserEdit(): void }):
       if (next === viewMode) return;
       viewMode = next;
       // CodeMirror's own scroll anchoring keeps the top visible line in place (e2e covers it).
-      view.dispatch({ effects: mode.reconfigure(modeExt()) });
+      view.dispatch({
+        effects: [
+          mode.reconfigure(modeExt()),
+          readOnly.reconfigure(EditorState.readOnly.of(isReadOnly())),
+        ],
+      });
+    },
+    getSelectionStart: () => view.state.selection.main.from,
+    setSearchHighlights(matches, activeIndex, scroll = false) {
+      const effects: StateEffect<unknown>[] = [setSearch.of({ matches, active: activeIndex })];
+      if (scroll && activeIndex >= 0 && activeIndex < matches.length) {
+        effects.push(EditorView.scrollIntoView(matches[activeIndex].from, { y: "center" }));
+      }
+      view.dispatch({ effects });
     },
     focus: () => view.focus(),
     themeChanged: () => view.dispatch({ effects: themeChanged.of(null) }),

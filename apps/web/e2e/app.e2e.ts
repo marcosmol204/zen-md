@@ -6,14 +6,19 @@ async function open(page: Page, text: string) {
   await expect(page).toHaveTitle("a.md");
 }
 
-test("live preview hides markdown markers until the selection touches them", async ({ page }) => {
+test("Preview mode hides markdown markers and is read-only; Cmd+E switches to Source edit mode", async ({ page }) => {
   await open(page, "intro\n\nSome **bold** text.\n");
-  const line = page.locator(".cm-line", { hasText: "Some" });
-  const marker = line.locator(".cm-formatting-inline").first();
-  await expect(marker).toBeHidden();
-  await line.click();
-  await page.keyboard.press("ControlOrMeta+a"); // a selection touching the markers reveals them
-  await expect(marker).toBeVisible();
+  const content = page.locator(".cm-content");
+  await expect(content).toContainText("Some bold text.");
+  await expect(content).not.toContainText("**bold**");
+  await content.click();
+  await page.keyboard.type("nope");
+  await expect(page).toHaveTitle("a.md");
+
+  await page.keyboard.press("ControlOrMeta+e");
+  await expect(content).toContainText("Some **bold** text.");
+  await page.keyboard.type("!");
+  await expect(page).toHaveTitle("● a.md");
 });
 
 test("a mermaid block renders as a diagram", async ({ page }) => {
@@ -21,13 +26,18 @@ test("a mermaid block renders as a diagram", async ({ page }) => {
   await expect(page.locator(".md-mermaid svg")).toBeVisible();
 });
 
-test("clicking a task checkbox toggles it and marks the doc dirty", async ({ page }) => {
-  await open(page, "intro\n\n- [ ] ship it\n");
-  const box = page.locator("input.md-task");
-  await expect(box).not.toBeChecked();
-  await box.click();
-  await expect(box).toBeChecked();
-  await expect(page).toHaveTitle("● a.md");
+test("Cmd+F searches the document, highlights matches, and navigates next/previous", async ({ page }) => {
+  await open(page, "# Alpha\n\nSome alpha and ALPHA.\n");
+  await page.keyboard.press("ControlOrMeta+f");
+  const input = page.locator("#search-input");
+  await expect(input).toBeFocused();
+  await input.fill("alpha");
+  await expect(page.locator("#search-count")).toHaveText("1 of 3");
+  await expect(page.locator(".cm-search-match")).toHaveCount(3);
+  await input.press("Enter");
+  await expect(page.locator("#search-count")).toHaveText("2 of 3");
+  await input.press("Escape");
+  await expect(page.locator("#search-bar")).toHaveCount(0);
 });
 
 test("an agent rewrite shows up in the editor", async ({ page }) => {
@@ -113,6 +123,7 @@ test("Source mode keeps the line at the top of the viewport in place", async ({ 
 
 test("the view-mode button sits below a banner, not over its buttons", async ({ page }) => {
   await open(page, "v1\n");
+  await page.keyboard.press("ControlOrMeta+e");
   await page.locator(".cm-content").click();
   await page.keyboard.type(" mine");
   await page.evaluate(() => window.__agent.write("a.md", "theirs\n"));

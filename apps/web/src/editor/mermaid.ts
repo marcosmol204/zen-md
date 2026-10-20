@@ -34,14 +34,12 @@ class Diagram extends WidgetType {
 
 function build(state: EditorState): DecorationSet {
   const out: Range<Decoration>[] = [];
-  const sel = state.selection.main;
   const dark = isDark();
   syntaxTree(state).iterate({
     enter: (n) => {
       if (n.name !== "FencedCode") return;
       const info = n.node.getChild("CodeInfo");
       if (!info || state.sliceDoc(info.from, info.to).trim() !== "mermaid") return false;
-      if (sel.from <= n.to && sel.to >= n.from) return false; // cursor inside: show source
       const text = n.node.getChild("CodeText");
       const code = text ? state.sliceDoc(text.from, text.to) : "";
       out.push(Decoration.replace({ widget: new Diagram(code, dark), block: true }).range(n.from, n.to));
@@ -51,11 +49,12 @@ function build(state: EditorState): DecorationSet {
   return Decoration.set(out);
 }
 
+// Preview only: the diagram always shows (its source is edited in Source mode).
 export const mermaidBlocks = Prec.highest(
   StateField.define<DecorationSet>({
     create: build,
     update: (deco, tr) =>
-      (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(themeChanged)) ? build(tr.state) : deco),
+      (tr.docChanged || tr.effects.some((e) => e.is(themeChanged)) || syntaxTree(tr.state) !== syntaxTree(tr.startState) ? build(tr.state) : deco),
     provide: (f) => EditorView.decorations.from(f),
   }),
 );

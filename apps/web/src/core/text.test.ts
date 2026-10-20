@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { conflictCopyPath, decodeUtf8, diffRange, joinFormat, splitFormat, type Change } from "./text";
+import { conflictCopyPath, decodeUtf8, diffRange, joinFormat, splitFormat, toggleTaskMarker, type Change } from "./text";
 
 const apply = (a: string, c: Change | null) => (c ? a.slice(0, c.from) + c.insert + a.slice(c.to) : a);
 const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
@@ -73,4 +73,12 @@ describe("conflictCopyPath", () => {
     expect(conflictCopyPath("/a/notes.md", now)).toBe("/a/notes.conflict-20261001-153005.md"));
   test("dot in folder name is not treated as extension", () =>
     expect(conflictCopyPath("/a.b/README", now)).toBe("/a.b/README.conflict-20261001-153005.md"));
+});
+
+describe("toggleTaskMarker", () => {
+  test("flips unchecked and checked task markers", () => {
+    expect(toggleTaskMarker("[ ]")).toBe("[x]");
+    expect(toggleTaskMarker("[x]")).toBe("[ ]");
+    expect(toggleTaskMarker("[X]")).toBe("[ ]");
+  });
 });

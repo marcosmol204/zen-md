@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { Code, Eye, FolderOpen, LoaderCircle, Monitor, Moon, Sun } from "lucide-react";
+import { Code, Eye, FolderOpen, LoaderCircle, Monitor, Moon, PanelLeft, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isMac } from "@/lib/utils";
 import { createApp, SIDEBAR_MIN } from "./controller";
@@ -8,6 +8,8 @@ import type { ViewMode } from "@/editor/editor";
 import { Banner } from "./components/Banner";
 import { ConfirmHost } from "./components/ConfirmHost";
 import { Editor } from "./components/Editor";
+import { OutlineButton, OutlinePanel } from "./components/Outline";
+import { QuickSwitcher } from "./components/QuickSwitcher";
 import { SearchBar } from "./components/SearchBar";
 import { Sidebar } from "./components/Sidebar";
 import { Welcome } from "./components/Welcome";
@@ -26,13 +28,19 @@ export default function App() {
   return (
     <>
     <div id="app" className="flex h-full" aria-busy={s.loading} inert={s.loading}>
-      <aside id="sidebar" className="relative flex flex-none flex-col border-r bg-sidebar text-sidebar-foreground" style={{ width: app.resize.width() }}>
+      <aside
+        id="sidebar"
+        hidden={s.sidebarCollapsed}
+        className="relative flex flex-none flex-col border-r bg-sidebar text-sidebar-foreground"
+        style={{ width: app.resize.width() }}
+      >
         <header className="flex h-11 items-center border-b px-2">
           <Button id="open-folder" variant="ghost" size="sm" className="flex-1 justify-start" onClick={() => void app.pickFolder()}>
             <FolderOpen aria-hidden />
             Open Folder…
           </Button>
           <AppearanceButton mode={app.theme.mode} onClick={app.theme.cycle} />
+          <SidebarToggleButton collapsed={false} onClick={app.toggleSidebar} />
         </header>
         <Sidebar
           tree={s.tree}
@@ -44,7 +52,14 @@ export default function App() {
         />
         <SidebarHandle width={app.resize.width()} resize={app.resize} />
       </aside>
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="relative flex min-w-0 flex-1 flex-col">
+        {s.sidebarCollapsed && (
+          <SidebarToggleButton
+            collapsed={true}
+            onClick={app.toggleSidebar}
+            className="absolute top-2 left-3 z-10 opacity-40 hover:opacity-100 focus-visible:opacity-100"
+          />
+        )}
         <Banner banner={doc.banner} actions={app.actions} />
         {!doc.path && !s.restoring && (
           <Welcome folder={s.root} folders={s.recentFolders} files={s.recentFiles} exists={app.exists} on={app.welcome} />
@@ -53,9 +68,12 @@ export default function App() {
         <div className="relative flex min-h-0 flex-1 flex-col" hidden={!doc.path}>
           <Editor el={app.editorEl} />
           {doc.path && <SearchBar state={s.search} on={app.search} />}
+          {doc.path && <OutlineButton open={s.outline.open} onClick={app.outline.toggle} />}
           {doc.path && <ViewModeButton mode={s.view} onClick={app.toggleView} />}
+          {doc.path && <OutlinePanel state={s.outline} on={app.outline} />}
         </div>
       </main>
+      <QuickSwitcher state={s.switcher} on={app.switcher} />
       <ConfirmHost />
     </div>
     {s.loading && <LoadingOverlay />}
@@ -117,6 +135,26 @@ function AppearanceButton({ mode, onClick }: { mode: Mode; onClick: () => void }
   return (
     <Button id="appearance" variant="ghost" size="icon-sm" aria-label={label} title={label} onClick={onClick}>
       <Icon aria-hidden />
+    </Button>
+  );
+}
+
+const sidebarKey = isMac ? "⌘B" : "Ctrl+B";
+
+function SidebarToggleButton({ collapsed, onClick, className }: { collapsed: boolean; onClick: () => void; className?: string }) {
+  const label = collapsed ? "Show sidebar" : "Hide sidebar";
+  return (
+    <Button
+      id="sidebar-toggle"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={label}
+      aria-expanded={!collapsed}
+      title={`${label} (${sidebarKey})`}
+      className={className}
+      onClick={onClick}
+    >
+      <PanelLeft aria-hidden />
     </Button>
   );
 }

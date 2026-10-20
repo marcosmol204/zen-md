@@ -44,7 +44,7 @@ export function SearchBar({ state, on }: { state: SearchViewState; on: SearchAct
       id="search-bar"
       role="search"
       aria-label="Find in document"
-      className="absolute top-2 right-12 z-10 flex h-8 items-center gap-1 rounded-md border bg-popover px-1.5 text-popover-foreground shadow-sm"
+      className="absolute top-2 right-20 z-10 flex h-8 items-center gap-1 rounded-md border bg-popover px-1.5 text-popover-foreground shadow-sm"
     >
       <input
         ref={inputRef}

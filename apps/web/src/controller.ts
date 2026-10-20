@@ -1,10 +1,15 @@
 import * as fsx from "@/platform/fsx";
 import type { EditorHandle, ViewMode } from "@/editor/editor";
 import { Doc, type EditorPort } from "@/core/doc";
+import { resolveMarkdownLink } from "@/core/links";
+import { extractHeadings, slugifyHeading } from "@/core/outline";
 import { activeMatchIndex, findMatches, stepMatchIndex } from "@/core/search";
+import { filterFiles } from "@/core/switcher";
 import { isMac } from "@/lib/utils";
 import type { BannerActions } from "./components/Banner";
 import { ask } from "./components/ConfirmHost";
+import type { OutlineActions, OutlineViewState } from "./components/Outline";
+import type { QuickSwitcherActions, QuickSwitcherViewState } from "./components/QuickSwitcher";
 import type { SearchActions, SearchViewState } from "./components/SearchBar";
 import type { MenuItem, Rename } from "./components/Sidebar";
 import * as recents from "@/core/recents";
@@ -40,8 +45,20 @@ export function createApp(render: () => void) {
       activeIndex: -1,
       focusSeq: 0,
     } as SearchViewState,
+    switcher: {
+      open: false,
+      query: "",
+      items: [],
+      activeIndex: -1,
+      focusSeq: 0,
+    } as QuickSwitcherViewState,
+    outline: {
+      open: false,
+      items: [],
+    } as OutlineViewState,
     /** Saved sidebar width; shown clamped to the current window. */
     sidebarWidth: SIDEBAR_DEFAULT,
+    sidebarCollapsed: false,
     /** True until startup has restored the last folder/file, so the welcome screen doesn't flash first. */
     restoring: true,
     /** A folder is being read; the app is covered and takes no input. */
@@ -66,9 +83,14 @@ export function createApp(render: () => void) {
       onDocChange: () => {
         if (s.search.open) {
           runSearch({ resetIndex: false, scroll: false });
-          render();
         }
+        if (s.outline.open) {
+          runOutline();
+        }
+        if (s.search.open || s.outline.open) render();
       },
+      onLinkClick: (href) => void openLink(href),
+      onCopyCode: (code) => void fsx.writeClipboard(code),
     });
     editor.setReadOnly(true);
   });
@@ -92,6 +114,7 @@ export function createApp(render: () => void) {
 
   function renderTree() {
     if (s.root) s.tree = buildTree(s.root, files);
+    if (s.switcher.open) runSwitcher(false);
     render();
   }
 
@@ -144,15 +167,36 @@ export function createApp(render: () => void) {
     return !doc.dirty;
   }
 
-  async function switchTo(path: string) {
-    if (path === doc.path || !(await guardUnsaved())) return;
-    await editorReady;
-    await doc.open(path);
-    if (s.root) s.recentFiles = recents.touch(s.recentFiles, { path, root: s.root }, 8);
-    editor!.setImageBase(fsx.assetUrl(parentOf(path)));
-    setActive(path);
-    if (!s.search.open) editor!.focus();
-    remember();
+  async function switchTo(path: string): Promise<boolean> {
+    if (path !== doc.path) {
+      if (!(await guardUnsaved())) return false;
+      await editorReady;
+      await doc.open(path);
+      if (s.root) s.recentFiles = recents.touch(s.recentFiles, { path, root: s.root }, 8);
+      editor!.setImageBase(fsx.assetUrl(parentOf(path)));
+      setActive(path);
+      if (s.outline.open) runOutline();
+      if (!s.search.open) editor!.focus();
+      remember();
+    }
+    return true;
+  }
+
+  async function openLink(href: string) {
+    if (!doc.path || !s.root) return;
+    const resolved = resolveMarkdownLink(href, doc.path, s.root, files);
+    if (!resolved) return;
+    if (resolved.path !== doc.path) {
+      if (!files.has(resolved.path) && !(await fsx.pathExists(resolved.path).catch(() => false))) return;
+      if (!(await switchTo(resolved.path))) return;
+    }
+    if (resolved.anchor && editor) {
+      const targetSlug = slugifyHeading(resolved.anchor);
+      const rawLower = resolved.anchor.toLowerCase();
+      const headings = extractHeadings(editor.getText());
+      const match = headings.find((h) => h.slug === rawLower || h.slug === targetSlug);
+      if (match) editor.scrollToPos(match.from);
+    }
   }
 
   function resetSearch() {
@@ -160,9 +204,18 @@ export function createApp(render: () => void) {
     editor?.setSearchHighlights([], -1, false);
   }
 
+  function resetSwitcher() {
+    s.switcher = { ...s.switcher, open: false, query: "", items: [], activeIndex: -1 };
+  }
+
+  function resetOutline() {
+    s.outline = { open: false, items: [] };
+  }
+
   async function closeDoc() {
     if (!(await guardUnsaved())) return;
     resetSearch();
+    resetOutline();
     doc.close();
     setActive(null);
     remember();
@@ -174,6 +227,8 @@ export function createApp(render: () => void) {
     unwatch?.();
     unwatch = null;
     resetSearch();
+    resetSwitcher();
+    resetOutline();
     if (doc.path) doc.close();
     s.root = dir;
     s.recentFolders = recents.touch(s.recentFolders, dir, 5);
@@ -363,6 +418,11 @@ export function createApp(render: () => void) {
     reset() { resize.set(SIDEBAR_DEFAULT); resize.commit(); },
   };
 
+  function toggleSidebar() {
+    s.sidebarCollapsed = !s.sidebarCollapsed;
+    render();
+  }
+
   function toggleView() {
     if (!doc.path) return;
     s.view = s.view === "formatted" ? "source" : "formatted";
@@ -427,14 +487,97 @@ export function createApp(render: () => void) {
     },
   };
 
+  function runSwitcher(resetIndex: boolean) {
+    if (!s.switcher.open || !s.root) {
+      s.switcher = { ...s.switcher, items: [], activeIndex: -1 };
+      return;
+    }
+    const items = filterFiles(
+      files,
+      s.root,
+      s.switcher.query,
+      s.recentFiles.map((f) => f.path),
+    );
+    const activeIndex = items.length === 0
+      ? -1
+      : resetIndex || s.switcher.activeIndex < 0 || s.switcher.activeIndex >= items.length
+        ? 0
+        : s.switcher.activeIndex;
+    s.switcher = { ...s.switcher, items, activeIndex };
+  }
+
+  function openSwitcher() {
+    if (!s.root) return;
+    s.switcher = { ...s.switcher, open: true, query: "", focusSeq: s.switcher.focusSeq + 1 };
+    runSwitcher(true);
+    render();
+  }
+
+  const switcher: QuickSwitcherActions = {
+    setQuery(query) {
+      s.switcher = { ...s.switcher, query };
+      runSwitcher(true);
+      render();
+    },
+    step(delta) {
+      if (!s.switcher.items.length) return;
+      const activeIndex = stepMatchIndex(s.switcher.items.length, s.switcher.activeIndex, delta);
+      s.switcher = { ...s.switcher, activeIndex };
+      render();
+    },
+    pick(path) {
+      resetSwitcher();
+      render();
+      void switchTo(path);
+    },
+    close() {
+      if (!s.switcher.open) return;
+      resetSwitcher();
+      render();
+      if (doc.path && !s.search.open) editor?.focus();
+    },
+  };
+
+  function runOutline() {
+    if (!s.outline.open || !doc.path || !editor) {
+      s.outline = { ...s.outline, items: [] };
+      return;
+    }
+    s.outline = { ...s.outline, items: extractHeadings(editor.getText()) };
+  }
+
+  function toggleOutline() {
+    if (!doc.path) return;
+    const nextOpen = !s.outline.open;
+    s.outline = { ...s.outline, open: nextOpen };
+    if (nextOpen) runOutline();
+    render();
+  }
+
+  const outline: OutlineActions = {
+    toggle: toggleOutline,
+    jump(from) {
+      editor?.scrollToPos(from);
+    },
+    close() {
+      if (!s.outline.open) return;
+      s.outline = { ...s.outline, open: false };
+      render();
+      if (doc.path && !s.search.open) editor?.focus();
+    },
+  };
+
   function start() {
     const onKey = (e: KeyboardEvent) => {
       if (s.loading || !(e.metaKey || e.ctrlKey)) return;
       if (e.key === "s") { e.preventDefault(); void doc.save(); }
-      if (e.key === "o") { e.preventDefault(); void pickFolder(); }
+      if (e.key.toLowerCase() === "o" && e.shiftKey && (isMac ? e.metaKey : e.ctrlKey)) { e.preventDefault(); toggleOutline(); return; }
+      if (e.key === "o" && !e.shiftKey) { e.preventDefault(); void pickFolder(); }
       // Platform key only: on macOS, Ctrl+E is CodeMirror's end-of-line, Ctrl+F is forward-char.
       if (e.key === "e" && (isMac ? e.metaKey : e.ctrlKey)) { e.preventDefault(); toggleView(); }
       if (e.key === "f" && (isMac ? e.metaKey : e.ctrlKey)) { e.preventDefault(); openSearch(); }
+      if (e.key === "p" && (isMac ? e.metaKey : e.ctrlKey)) { e.preventDefault(); openSwitcher(); }
+      if (e.key === "b" && (isMac ? e.metaKey : e.ctrlKey)) { e.preventDefault(); toggleSidebar(); }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", render);
@@ -466,5 +609,5 @@ export function createApp(render: () => void) {
     remove: forgetRecent,
   };
 
-  return { s, doc, editorEl, exists: fsx.pathExists, actions, sidebar, resize, welcome, theme, search, pickFolder, toggleView, start };
+  return { s, doc, editorEl, exists: fsx.pathExists, actions, sidebar, resize, welcome, theme, search, switcher, outline, pickFolder, toggleView, toggleSidebar, start };
 }

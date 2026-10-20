@@ -11,6 +11,7 @@ import { Editor } from "./components/Editor";
 import { OutlineButton, OutlinePanel } from "./components/Outline";
 import { QuickSwitcher } from "./components/QuickSwitcher";
 import { SearchBar } from "./components/SearchBar";
+import { ShortcutsButton, ShortcutsModal } from "./components/Shortcuts";
 import { Sidebar } from "./components/Sidebar";
 import { Welcome } from "./components/Welcome";
 import type { Mode } from "@/platform/theme";
@@ -35,11 +36,12 @@ export default function App() {
         style={{ width: app.resize.width() }}
       >
         <header className="flex h-11 items-center border-b px-2">
-          <Button id="open-folder" variant="ghost" size="sm" className="flex-1 justify-start" onClick={() => void app.pickFolder()}>
+          <Button id="open-folder" variant="ghost" size="sm" className="min-w-0 flex-1 justify-start" onClick={() => void app.pickFolder()}>
             <FolderOpen aria-hidden />
-            Open Folder…
+            <span className="truncate">Open Folder…</span>
           </Button>
           <AppearanceButton mode={app.theme.mode} onClick={app.theme.cycle} />
+          <ShortcutsButton open={s.shortcuts.open} onClick={app.shortcuts.toggle} />
           <SidebarToggleButton collapsed={false} onClick={app.toggleSidebar} />
         </header>
         <Sidebar
@@ -74,6 +76,7 @@ export default function App() {
         </div>
       </main>
       <QuickSwitcher state={s.switcher} on={app.switcher} />
+      <ShortcutsModal state={s.shortcuts} on={app.shortcuts} />
       <ConfirmHost />
     </div>
     {s.loading && <LoadingOverlay />}

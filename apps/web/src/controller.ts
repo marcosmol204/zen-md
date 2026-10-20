@@ -11,6 +11,7 @@ import { ask } from "./components/ConfirmHost";
 import type { OutlineActions, OutlineViewState } from "./components/Outline";
 import type { QuickSwitcherActions, QuickSwitcherViewState } from "./components/QuickSwitcher";
 import type { SearchActions, SearchViewState } from "./components/SearchBar";
+import type { ShortcutsActions, ShortcutsViewState } from "./components/Shortcuts";
 import type { MenuItem, Rename } from "./components/Sidebar";
 import * as recents from "@/core/recents";
 import { createTheme } from "@/platform/theme";
@@ -56,6 +57,9 @@ export function createApp(render: () => void) {
       open: false,
       items: [],
     } as OutlineViewState,
+    shortcuts: {
+      open: false,
+    } as ShortcutsViewState,
     /** Saved sidebar width; shown clamped to the current window. */
     sidebarWidth: SIDEBAR_DEFAULT,
     sidebarCollapsed: false,
@@ -508,6 +512,7 @@ export function createApp(render: () => void) {
 
   function openSwitcher() {
     if (!s.root) return;
+    if (s.shortcuts.open) s.shortcuts = { open: false };
     s.switcher = { ...s.switcher, open: true, query: "", focusSeq: s.switcher.focusSeq + 1 };
     runSwitcher(true);
     render();
@@ -567,9 +572,51 @@ export function createApp(render: () => void) {
     },
   };
 
+  function toggleShortcuts() {
+    const nextOpen = !s.shortcuts.open;
+    if (nextOpen && s.switcher.open) resetSwitcher();
+    s.shortcuts = { open: nextOpen };
+    render();
+    if (!nextOpen && doc.path && !s.search.open) editor?.focus();
+  }
+
+  const shortcuts: ShortcutsActions = {
+    toggle: toggleShortcuts,
+    close() {
+      if (!s.shortcuts.open) return;
+      s.shortcuts = { open: false };
+      render();
+      if (doc.path && !s.search.open) editor?.focus();
+    },
+  };
+
   function start() {
     const onKey = (e: KeyboardEvent) => {
-      if (s.loading || !(e.metaKey || e.ctrlKey)) return;
+      if (s.loading) return;
+      if (e.key === "Escape" && s.shortcuts.open) {
+        e.preventDefault();
+        shortcuts.close();
+        return;
+      }
+      if ((e.key === "/" || e.key === "?") && (isMac ? e.metaKey : e.ctrlKey)) {
+        e.preventDefault();
+        toggleShortcuts();
+        return;
+      }
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const t = e.target as HTMLElement | null;
+        const inEditor = !!t?.closest(".cm-editor");
+        const inEditable =
+          t instanceof HTMLInputElement ||
+          t instanceof HTMLTextAreaElement ||
+          (inEditor ? s.view === "source" && !!doc.path : !!t?.isContentEditable);
+        if (!inEditable) {
+          e.preventDefault();
+          toggleShortcuts();
+          return;
+        }
+      }
+      if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key === "s") { e.preventDefault(); void doc.save(); }
       if (e.key.toLowerCase() === "o" && e.shiftKey && (isMac ? e.metaKey : e.ctrlKey)) { e.preventDefault(); toggleOutline(); return; }
       if (e.key === "o" && !e.shiftKey) { e.preventDefault(); void pickFolder(); }
@@ -609,5 +656,5 @@ export function createApp(render: () => void) {
     remove: forgetRecent,
   };
 
-  return { s, doc, editorEl, exists: fsx.pathExists, actions, sidebar, resize, welcome, theme, search, switcher, outline, pickFolder, toggleView, toggleSidebar, start };
+  return { s, doc, editorEl, exists: fsx.pathExists, actions, sidebar, resize, welcome, theme, search, switcher, outline, shortcuts, pickFolder, toggleView, toggleSidebar, start };
 }

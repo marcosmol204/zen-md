@@ -76,9 +76,14 @@ node scripts/fake-agent.mjs <folder-path> stream
 
 | Action | Shortcut |
 |---|---|
-| Toggle Formatted / Source view | `⌘E` |
-| Save file | `⌘S` |
 | Open folder | `⌘O` |
+| Quick file switcher | `⌘P` |
+| Toggle sidebar | `⌘B` |
+| Save file | `⌘S` |
+| Toggle Formatted / Source view | `⌘E` |
+| Toggle document outline | `⇧⌘O` |
+| Find in document | `⌘F` |
+| Keyboard shortcuts | `⌘/` or `?` |
 
 ---
 

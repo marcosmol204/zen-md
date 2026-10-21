@@ -144,8 +144,15 @@
 .cm-editor.cm-focused { outline: none; }
 .cm-editor .cm-scroller { padding: 24px 0; }
 .cm-editor .cm-scroller { container-type: inline-size; }
-/* Paper sits left, next to the sidebar; the gutter grows with the editor pane (not the window: the sidebar resizes). */
-.cm-editor .cm-content { max-width: 760px; padding: 0 32px 0 clamp(32px, 6cqi, 96px); font-size: 16px; line-height: 1.65; }
+/* Content fills the full width of the editor view and responds to 100% of the window. */
+.cm-editor .cm-content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 clamp(24px, 3cqi, 48px);
+  font-size: 16px;
+  line-height: 1.65;
+}
 .cm-editor .cm-cursor { border-left-color: hsl(var(--foreground)); }
 .md-task { margin: 0 6px 0 0; vertical-align: middle; cursor: pointer; }
 .md-mermaid { display: flex; justify-content: center; padding: 12px 0; color: hsl(var(--muted-foreground)); }
@@ -181,7 +188,63 @@
 .cm-editor .md-code-copy[data-copied="true"] {
   opacity: 1; color: hsl(var(--foreground));
 }
-.cm-editor .cm-table-widget table { border-radius: 6px; font-size: 15px; }
+.cm-editor .cm-table-widget {
+  position: relative;
+  overflow-x: auto;
+}
+.cm-editor .cm-table-widget table {
+  border-radius: 6px;
+  font-size: 15px;
+  border-collapse: collapse;
+}
+.cm-editor .cm-table-widget th {
+  position: relative;
+  user-select: text;
+}
+.cm-editor .md-table-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 2;
+  border-right: 2px solid transparent;
+  transition: border-color 120ms ease;
+}
+.cm-editor .md-table-resize-handle:hover,
+.cm-editor .md-table-resize-handle.is-resizing {
+  border-right-color: hsl(var(--brand));
+}
+.cm-editor .md-table-copy {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--background) / 0.85);
+  border: 1px solid hsl(var(--border));
+  opacity: 0;
+  transition: opacity 120ms ease;
+  cursor: pointer;
+  z-index: 3;
+}
+.cm-editor .cm-table-widget:hover .md-table-copy,
+.cm-editor .md-table-copy:focus-visible,
+.cm-editor .md-table-copy[data-copied="true"] {
+  opacity: 1;
+  color: hsl(var(--foreground));
+}
+body.md-table-resizing {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
 .cm-editor .md-table [contenteditable="true"] { outline: none; cursor: text; }
 .cm-editor .md-table [contenteditable="true"]:focus { box-shadow: inset 0 0 0 2px hsl(var(--primary) / 0.5); }
 .cm-editor .md-bullet { display: inline-block; white-space: pre; }

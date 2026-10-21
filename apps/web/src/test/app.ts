@@ -162,6 +162,8 @@ export async function boot({ files = {}, lastFile, settings, failWatch = false, 
     },
     /** The view-mode button's label, or null when it isn't shown. */
     viewButton: () => $("#view-mode")?.getAttribute("aria-label") ?? null,
+    /** The preview badge element, or null when not shown. */
+    previewBadge: () => $("#preview-badge"),
     appearance: () => ({
       label: $("#appearance")!.getAttribute("aria-label"),
       dark: document.documentElement.classList.contains("dark"),

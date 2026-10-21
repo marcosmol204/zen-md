@@ -692,6 +692,57 @@ describe("Preview (view mode) vs Source (edit mode) and copying", () => {
     app.selectRange(md.indexOf("Some"), md.indexOf(" here."));
     expect(app.copy()).toBe("Some **bold** and `inline` and [a link](https://x.dev)");
   });
+
+  test("Preview badge displays in Preview mode, clicking it switches to Source mode, and it hides in Source mode", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    const badge = app.previewBadge();
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toContain("Preview");
+    expect(badge?.getAttribute("aria-label")).toContain("Preview mode (read-only)");
+
+    // Clicking the badge switches to Source mode
+    badge?.click();
+    expect(app.viewButton()).toBe("Show formatted");
+    expect(app.previewBadge()).toBeNull();
+
+    // Toggling back to preview restores the badge
+    app.pressViewKey();
+    expect(app.previewBadge()).not.toBeNull();
+  });
+
+  test("tables in Preview mode have resizable column handles, copy button, and reset on double-click", async () => {
+    app = await boot({ files: { "a.md": md }, lastFile: "a.md" });
+    const tableWidget = document.querySelector<HTMLElement>(".cm-table-widget");
+    expect(tableWidget).not.toBeNull();
+
+    // Check colgroup and cols exist
+    const cols = tableWidget!.querySelectorAll("col");
+    expect(cols.length).toBe(2);
+
+    // Check resize handles exist on header cells
+    const handles = tableWidget!.querySelectorAll<HTMLElement>(".md-table-resize-handle");
+    expect(handles.length).toBe(2);
+
+    // Simulate drag on first column handle
+    const handle0 = handles[0];
+    handle0.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: 100, button: 0 }));
+    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 160 }));
+    window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, clientX: 160 }));
+
+    // Col width was updated
+    expect(cols[0].style.width).toBe("180px");
+
+    // Double-click resets widths
+    handle0.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(cols[0].style.width).toBe("");
+    expect(cols[1].style.width).toBe("");
+
+    // Table copy button copies table text to clipboard
+    const tableCopyBtn = tableWidget!.querySelector<HTMLButtonElement>(".md-table-copy");
+    expect(tableCopyBtn).not.toBeNull();
+    tableCopyBtn!.click();
+    expect(app.clipboard()).toBe("a\tb\n1\t2");
+  });
 });
 
 describe("search (Cmd+F)", () => {

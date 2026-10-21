@@ -231,12 +231,34 @@ class TableWidget extends WidgetType {
     const wrap = document.createElement("div");
     wrap.className = "cm-table-widget md-table";
     wrap.contentEditable = "false";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "md-table-copy";
+    copyBtn.setAttribute("aria-label", "Copy table");
+    copyBtn.title = "Copy table";
+    copyBtn.dataset.table = this.toText();
+    copyBtn.innerHTML = COPY_SVG;
+    wrap.append(copyBtn);
+
     const table = document.createElement("table");
     const cols = this.model.rows[0]?.length ?? 0;
+
+    const colgroup = document.createElement("colgroup");
+    const colElements: HTMLTableColElement[] = [];
+    for (let c = 0; c < cols; c++) {
+      const col = document.createElement("col");
+      colgroup.append(col);
+      colElements.push(col);
+    }
+    table.append(colgroup);
+
+    const thCells: HTMLTableCellElement[] = [];
     this.model.rows.forEach((row, r) => {
       const tr = document.createElement("tr");
       for (let c = 0; c < cols; c++) {
         const cell = document.createElement(r === 0 ? "th" : "td");
+        if (r === 0) thCells.push(cell);
         const text = row[c] ?? "";
         const align = this.model.align[c];
         if (align) cell.style.textAlign = align;
@@ -247,10 +269,102 @@ class TableWidget extends WidgetType {
       }
       (r === 0 ? table.createTHead() : (table.tBodies[0] ?? table.createTBody())).append(tr);
     });
+
+    thCells.forEach((th, c) => {
+      th.style.position = "relative";
+      const handle = document.createElement("span");
+      handle.className = "md-table-resize-handle";
+      handle.setAttribute("aria-hidden", "true");
+      handle.title = "Drag to resize column (double-click to reset)";
+      th.append(handle);
+
+      let startX = 0;
+      let startWidth = 0;
+      let isDragging = false;
+
+      const onPointerDown = (e: PointerEvent) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!table.style.tableLayout) {
+          thCells.forEach((cell, idx) => {
+            const currentW = Math.max(48, Math.round(cell.getBoundingClientRect().width || (cell.offsetWidth || 120)));
+            colElements[idx].style.width = `${currentW}px`;
+          });
+          table.style.tableLayout = "fixed";
+          table.style.width = "max-content";
+          table.style.minWidth = "100%";
+        }
+
+        isDragging = true;
+        startX = e.clientX;
+        startWidth = Math.max(48, Math.round(th.getBoundingClientRect().width || (th.offsetWidth || 120)));
+        try {
+          handle.setPointerCapture(e.pointerId);
+        } catch {
+          // ignore
+        }
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerEnd, { once: true });
+        window.addEventListener("pointercancel", onPointerEnd, { once: true });
+        handle.classList.add("is-resizing");
+        document.body.classList.add("md-table-resizing");
+      };
+
+      const onPointerMove = (e: PointerEvent) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.clientX - startX;
+        const newWidth = Math.max(48, Math.round(startWidth + delta));
+        colElements[c].style.width = `${newWidth}px`;
+      };
+
+      const onPointerEnd = (e: PointerEvent) => {
+        if (!isDragging) return;
+        isDragging = false;
+        handle.classList.remove("is-resizing");
+        document.body.classList.remove("md-table-resizing");
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerEnd);
+        window.removeEventListener("pointercancel", onPointerEnd);
+        try {
+          if (handle.hasPointerCapture?.(e.pointerId)) {
+            handle.releasePointerCapture(e.pointerId);
+          }
+        } catch {
+          // ignore
+        }
+      };
+
+      const onDoubleClick = (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        colElements.forEach((col) => {
+          col.style.width = "";
+        });
+        table.style.tableLayout = "";
+        table.style.width = "";
+        table.style.minWidth = "";
+      };
+
+      handle.addEventListener("pointerdown", onPointerDown);
+      handle.addEventListener("pointermove", onPointerMove);
+      handle.addEventListener("pointerup", onPointerEnd);
+      handle.addEventListener("pointercancel", onPointerEnd);
+      handle.addEventListener("lostpointercapture", onPointerEnd);
+      handle.addEventListener("dblclick", onDoubleClick);
+    });
+
     wrap.append(table);
     return wrap;
   }
-  ignoreEvent() { return true; }
+  ignoreEvent(event: Event) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(".md-table-copy")) return false;
+    return true;
+  }
 }
 
 /** Read-only rendering of a cell that holds markup: bold, italic, strike, code, links. */
@@ -307,12 +421,20 @@ function sliceVisible(state: EditorState, from: number, to: number): string {
 }
 
 function copyFromPreview(view: EditorView): string | null {
+  const domSel = window.getSelection();
+  const selText = domSel?.toString() ?? "";
+  const anchorNode = domSel?.anchorNode;
+  const isInsideTable = anchorNode instanceof Node &&
+    (anchorNode instanceof Element ? anchorNode : anchorNode.parentElement)?.closest(".cm-table-widget");
+  if (isInsideTable && selText) {
+    return selText;
+  }
+
   const ranges = view.state.selection.ranges.filter((r) => !r.empty);
   if (ranges.length > 0) {
     return ranges.map((r) => sliceVisible(view.state, r.from, r.to)).join("\n");
   }
-  const domSel = window.getSelection()?.toString() ?? "";
-  return domSel || null;
+  return selText || null;
 }
 
 // Code blocks in Preview are styled lines; colour them with the library's highlighter (same hljs classes).
@@ -390,6 +512,24 @@ export function preview(opts?: PreviewOptions): Extension {
             delete copyBtn.dataset.copied;
             copyBtn.setAttribute("aria-label", "Copy code");
             copyBtn.innerHTML = COPY_SVG;
+          }
+        }, 1500);
+        return true;
+      }
+
+      const tableCopyBtn = el.closest<HTMLButtonElement>("button.md-table-copy");
+      if (tableCopyBtn) {
+        event.preventDefault();
+        const text = tableCopyBtn.dataset.table ?? "";
+        opts?.onCopyCode?.(text);
+        tableCopyBtn.dataset.copied = "true";
+        tableCopyBtn.setAttribute("aria-label", "Copied");
+        tableCopyBtn.innerHTML = CHECK_SVG;
+        window.setTimeout(() => {
+          if (tableCopyBtn.isConnected) {
+            delete tableCopyBtn.dataset.copied;
+            tableCopyBtn.setAttribute("aria-label", "Copy table");
+            tableCopyBtn.innerHTML = COPY_SVG;
           }
         }, 1500);
         return true;

@@ -70,6 +70,7 @@ export default function App() {
         <div className="relative flex min-h-0 flex-1 flex-col" hidden={!doc.path}>
           <Editor el={app.editorEl} />
           {doc.path && <SearchBar state={s.search} on={app.search} />}
+          {doc.path && s.view === "formatted" && <PreviewBadge onClick={app.toggleView} />}
           {doc.path && <OutlineButton open={s.outline.open} onClick={app.outline.toggle} />}
           {doc.path && <ViewModeButton mode={s.view} onClick={app.toggleView} />}
           {doc.path && <OutlinePanel state={s.outline} on={app.outline} />}
@@ -164,6 +165,23 @@ function SidebarToggleButton({ collapsed, onClick, className }: { collapsed: boo
 
 const viewKey = isMac ? "⌘E" : "Ctrl+E";
 const viewButton: Record<ViewMode, [typeof Code, string]> = { formatted: [Code, "Show source"], source: [Eye, "Show formatted"] };
+
+function PreviewBadge({ onClick }: { onClick: () => void }) {
+  const label = `Preview mode (read-only) — switch to edit (${viewKey})`;
+  return (
+    <button
+      id="preview-badge"
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="absolute top-2 right-20 z-10 flex h-7 items-center gap-1.5 rounded-full border border-border/70 bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-muted-foreground opacity-70 transition-opacity hover:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 outline-none select-none cursor-pointer"
+    >
+      <Eye aria-hidden className="size-3.5" />
+      <span>Preview</span>
+    </button>
+  );
+}
 
 function ViewModeButton({ mode, onClick }: { mode: ViewMode; onClick: () => void }) {
   const [Icon, label] = viewButton[mode];
